@@ -1,0 +1,11 @@
+# 内部工作数据（记忆、计划等），不入库
+.workbuddy/
+
+# 系统与编辑器杂物
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+
+# 截图工具临时产物
+~$*

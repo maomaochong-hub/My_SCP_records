@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>S_C_P // 个人终端</title>
+<meta name="description" content="SCP 基金会主题个人站点：项目收集、灵感写作与预留板块。">
+<meta name="theme-color" content="#07080a">
+<link rel="icon" href="assets/sigil.png">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<div class="grain" aria-hidden="true"></div>
+<div class="scan" aria-hidden="true"></div>
+
+<header class="hud hud--top">
+  <div class="hud__l">
+    <button class="hud__brand" type="button" data-act="home">
+      <span class="hud__dot"></span>
+      <span>SCP FOUNDATION</span>
+      <span class="hud__sep hud__rest">/</span>
+      <span class="hud__rest">PERSONAL TERMINAL</span>
+    </button>
+  </div>
+  <div class="hud__c">SITE-05 · CLEARANCE 3 · TERMINAL 001</div>
+  <div class="hud__r">
+    <span class="save" id="saveState" data-state="ok"><i></i><span id="saveText">已保存</span></span>
+    <button class="hud__btn" type="button" data-act="export">导出档案</button>
+    <label class="hud__btn hud__btn--imp" title="导入 JSON 档案">导入<input type="file" id="importInput" accept=".json,application/json" hidden></label>
+  </div>
+</header>
+
+<main id="app"></main>
+
+<footer class="hud hud--bot">
+  <span>SECURE · CONTAIN · PROTECT</span>
+  <span class="hud__clock"><span id="clock">--:--:--</span><span class="hud__sep">//</span><span id="clockDate">----</span></span>
+</footer>
+
+<div class="veil" id="veil" aria-hidden="true">
+  <div class="veil__p"></div><div class="veil__p"></div><div class="veil__p"></div><div class="veil__p"></div>
+  <div class="veil__p"></div><div class="veil__p"></div><div class="veil__p"></div><div class="veil__p"></div>
+  <div class="veil__label" id="veilLabel">ACCESSING</div>
+</div>
+
+<div class="modal" id="modal" hidden>
+  <div class="modal__bd" data-act="modal-close"></div>
+  <form class="modal__pn" id="itemForm" autocomplete="off">
+    <header class="modal__hd">
+      <span class="modal__k" id="modalKicker">NEW RECORD</span>
+      <h2 class="modal__t" id="modalTitle">新建项目</h2>
+      <button class="modal__x" type="button" data-act="modal-close" aria-label="关闭">✕</button>
+    </header>
+    <div class="field">
+      <label for="f-code">编号 / CODE</label>
+      <input id="f-code" name="code" placeholder="SCP-XXXX" spellcheck="false">
+    </div>
+    <div class="field">
+      <label for="f-title">名称 / TITLE *</label>
+      <input id="f-title" name="title" required placeholder="条目名称" maxlength="80">
+    </div>
+    <div class="field">
+      <label for="f-url">链接 / URL</label>
+      <input id="f-url" name="url" placeholder="https://scp-wiki-cn.wikidot.com/..." spellcheck="false">
+    </div>
+    <div class="field">
+      <label for="f-cat">分类 / CATEGORY</label>
+      <select id="f-cat" name="catId"></select>
+    </div>
+    <div class="field">
+      <label for="f-note">备注 / NOTE</label>
+      <textarea id="f-note" name="note" rows="3" placeholder="为什么收藏它？"></textarea>
+    </div>
+    <footer class="modal__ft">
+      <span class="modal__hint">保存后立即写入本地档案</span>
+      <button class="btn" type="button" data-act="modal-close">取消</button>
+      <button class="btn btn--primary" type="submit">保存记录</button>
+    </footer>
+  </form>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<noscript><div class="noscript">此终端需要启用 JavaScript 才能运行。</div></noscript>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

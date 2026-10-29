@@ -1,0 +1,13 @@
+.git
+.gitignore
+.workbuddy
+data
+docs
+test
+node_modules
+*.log
+.env
+.env.example
+README.md
+Dockerfile
+.dockerignore

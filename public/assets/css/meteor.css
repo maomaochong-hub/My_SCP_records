@@ -1,0 +1,95 @@
+/* =========================================================
+   流星：斜落的星辰 —— 拖尾精灵 + 星核十字芒 + 大流星掠食
+   ========================================================= */
+
+.meteor-field{
+  position:absolute;inset:0;z-index:5;overflow:hidden;pointer-events:none;
+  contain:strict;
+}
+.meteor{
+  position:absolute;left:0;top:0;
+  height:var(--h,10px);width:var(--len,160px);
+  transform-origin:100% 50%;
+  opacity:0;will-change:transform,opacity;
+  --tail:url("/assets/img/meteor-small.png");
+  --spike:17px;
+  filter:drop-shadow(0 0 4px rgba(255,255,255,.55));
+}
+.meteor.is-big{--tail:url("/assets/img/meteor-big.png");--spike:30px;filter:drop-shadow(0 0 7px rgba(255,255,255,.65))}
+
+/* 拖尾：精灵图（自带纵向柔化与长度渐隐）压在一条极细的亮芯上 */
+.meteor::before{
+  content:"";position:absolute;inset:0;
+  background-image:
+    var(--tail),
+    linear-gradient(90deg,transparent 0%,rgba(216,218,211,.05) 50%,rgba(236,239,232,.62) 88%,rgba(255,255,255,.95) 100%);
+  background-size:100% 100%,100% 30%;
+  background-repeat:no-repeat,no-repeat;
+  background-position:center,center;
+  opacity:.94;
+}
+.meteor.is-big::before{opacity:1;background-size:100% 100%,100% 24%}
+
+/* 星核：中心亮点 + 十字星芒 */
+.meteor::after{
+  content:"";position:absolute;right:0;top:50%;
+  width:var(--spike);height:var(--spike);
+  transform:translate(50%,-50%) scale(var(--tw,1));
+  background-image:
+    radial-gradient(circle,rgba(255,255,255,1) 0 1.1px,rgba(255,255,255,.55) 1.9px,transparent 3.1px),
+    linear-gradient(90deg,transparent 0%,rgba(255,255,255,.95) 50%,transparent 100%),
+    linear-gradient(180deg,transparent 0%,rgba(255,255,255,.8) 50%,transparent 100%);
+  background-size:100% 100%,100% 1px,1px 100%;
+  background-position:center,center,center;
+  background-repeat:no-repeat;
+  filter:drop-shadow(0 0 4px rgba(255,255,255,.85));
+  will-change:transform;
+}
+.meteor.is-big::after{
+  filter:drop-shadow(0 0 8px rgba(255,255,255,1)) drop-shadow(0 0 26px rgba(255,255,255,.5));
+}
+
+/* 大流星的环境光：核心紧、衰减快，才像一点强光而不是一团雾 */
+.meteor__glow{
+  position:absolute;left:0;top:0;
+  width:var(--gs,420px);height:var(--gs,420px);
+  margin:calc(var(--gs,420px) / -2) 0 0 calc(var(--gs,420px) / -2);
+  border-radius:50%;pointer-events:none;opacity:0;
+  background:radial-gradient(circle,
+    rgba(255,255,255,.26) 0%,
+    rgba(219,229,255,.11) 9%,
+    rgba(190,206,255,.045) 24%,
+    rgba(170,190,255,.014) 44%,
+    transparent 64%);
+  mix-blend-mode:screen;
+  will-change:transform,opacity;
+}
+
+/* 被大流星撞散的小流星 */
+.meteor.is-hit{transition:opacity .12s linear;opacity:0!important}
+.meteor.is-hit::after{transform:translate(50%,-50%) scale(2.2)}
+
+.meteor__spark{
+  position:absolute;width:2px;height:2px;margin:-1px 0 0 -1px;border-radius:50%;
+  background:#fff;box-shadow:0 0 10px 3px rgba(255,255,255,.55);
+  pointer-events:none;animation:sparkOut .26s ease-out forwards;
+  will-change:transform,opacity;
+}
+
+/* 极淡的常驻星尘 */
+.starfield{position:absolute;inset:0;z-index:2;overflow:hidden;pointer-events:none}
+.star{
+  position:absolute;width:1px;height:1px;border-radius:50%;
+  background:#dfe1da;opacity:.08;
+  animation:starTwinkle ease-in-out infinite;
+}
+
+@keyframes sparkOut{
+  from{opacity:1;transform:scale(.5)}
+  to{opacity:0;transform:scale(8)}
+}
+@keyframes starTwinkle{0%,100%{opacity:.045}50%{opacity:.15}}
+
+@media (prefers-reduced-motion:reduce){
+  .meteor-field,.starfield{display:none}
+}

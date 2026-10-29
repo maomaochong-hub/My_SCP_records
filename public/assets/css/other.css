@@ -1,0 +1,45 @@
+/* =========================================================
+   其他（预留板块）
+   ========================================================= */
+
+.ghost-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(238px,1fr));gap:14px}
+.ghost{
+  position:relative;display:flex;flex-direction:column;gap:10px;
+  min-height:238px;padding:20px 18px;border:1px dashed var(--line-2);
+  transition:.4s var(--ease);
+}
+.ghost:hover{border-color:var(--line-3);background:rgba(216,218,211,.022)}
+.ghost__k{font-family:var(--mono);font-size:9px;letter-spacing:.26em;color:var(--ink-4)}
+.ghost__t{font-size:15px;letter-spacing:.12em;color:var(--ink-2)}
+.ghost__line{
+  height:1px;margin-top:auto;
+  background:repeating-linear-gradient(90deg,var(--line-2) 0 5px,transparent 5px 11px);
+}
+.ghost__s{font-family:var(--mono);font-size:9px;letter-spacing:.2em;color:var(--ink-4);line-height:1.9}
+.ghost__lock{position:absolute;right:18px;top:17px;font-family:var(--mono);font-size:10px;color:var(--ink-4)}
+.ghost__num{
+  position:absolute;right:12px;bottom:44px;
+  font-size:68px;font-weight:800;line-height:1;letter-spacing:-.05em;
+  color:rgba(216,218,211,.035);pointer-events:none;user-select:none;
+}
+.reserve{
+  display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
+  margin-top:clamp(16px,2.4vh,26px);padding-top:12px;border-top:1px solid var(--line);
+  font-family:var(--mono);font-size:9px;letter-spacing:.2em;color:var(--ink-4);
+}
+
+.slot{
+  margin-top:clamp(24px,3.6vh,38px);padding:18px 20px;
+  border:1px solid var(--line);background:rgba(216,218,211,.015);
+  transition:border-color .35s;
+}
+.slot:focus-within{border-color:var(--line-2)}
+.slot__h{
+  display:flex;justify-content:space-between;gap:12px;margin-bottom:12px;
+  font-family:var(--mono);font-size:9px;letter-spacing:.24em;color:var(--ink-4);text-transform:uppercase;
+}
+.slot__body{
+  min-height:92px;outline:none;font-size:13px;line-height:1.95;color:var(--ink-2);
+  white-space:pre-wrap;word-break:break-word;
+}
+.slot__body:empty::before{content:attr(data-ph);color:var(--ink-4)}

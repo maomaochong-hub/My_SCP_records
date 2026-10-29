@@ -1,6 +1,16 @@
 # 内部工作数据（记忆、计划等），不入库
 .workbuddy/
 
+# 本地数据与密钥
+data/
+.env
+.env.local
+
+# 依赖与日志
+node_modules/
+*.log
+npm-debug.log*
+
 # 系统与编辑器杂物
 .DS_Store
 Thumbs.db

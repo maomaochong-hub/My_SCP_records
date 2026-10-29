@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="is-booting">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>灵感写作 // S_C_P</title>
+<meta name="description" content="浮动便签记录灵感，网页创作模块可直接编写、预览与回滚页面。">
+<meta name="theme-color" content="#07080a">
+<link rel="canonical" href="/writing/">
+<link rel="icon" href="/assets/sigil.png">
+<link rel="stylesheet" href="/assets/css/base.css">
+<link rel="stylesheet" href="/assets/css/writing.css">
+<link rel="stylesheet" href="/assets/css/studio.css">
+<script type="module" src="/assets/js/boot.js"></script>
+</head>
+<body data-page="writing">
+
+<div class="grain" aria-hidden="true"></div>
+<div class="scan" aria-hidden="true"></div>
+
+<header class="hud hud--top" id="hud-top"></header>
+<main id="app"></main>
+<footer class="hud hud--bot" id="hud-bot"></footer>
+
+<div id="modal-root"></div>
+<div class="toast" id="toast" role="status"></div>
+
+<div class="veil is-on" id="veil" aria-hidden="true">
+  <div class="veil__p"></div><div class="veil__p"></div><div class="veil__p"></div><div class="veil__p"></div>
+  <div class="veil__p"></div><div class="veil__p"></div><div class="veil__p"></div><div class="veil__p"></div>
+  <div class="veil__label" id="veilLabel">OPENING / NOTES</div>
+</div>
+
+<noscript><div style="position:fixed;inset:0;display:grid;place-items:center;background:#07080a;color:#a8aca5;font-family:monospace;letter-spacing:.2em">此终端需要启用 JavaScript。</div></noscript>
+</body>
+</html>

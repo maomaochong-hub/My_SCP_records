@@ -1,0 +1,16 @@
+{
+  "name": "scp-terminal",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "SCP 基金会主题个人档案站：项目收集、灵感写作、网页创作与访客统计",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node --watch server/server.js",
+    "seed": "node scripts/seed.js",
+    "test": "node --test test/*.test.js"
+  }
+}

@@ -90,6 +90,9 @@
 }
 @keyframes starTwinkle{0%,100%{opacity:.045}50%{opacity:.15}}
 
-@media (prefers-reduced-motion:reduce){
-  .meteor-field,.starfield{display:none}
-}
+/* 注意：这里**不能**用 display:none 隐藏流星层。
+   一旦隐藏，.meteor-field 的尺寸会变成 0×0，JS 里读不到宽高就再也不生成流星，
+   而且即使后来强制启动也画不出来。减少动效的处理放在 JS 里（更慢、更少），
+   只有明确写了 ?meteors=off 才真正隐藏。 */
+html.meteor-off .meteor-field,
+html.meteor-off .starfield{display:none}

@@ -31,6 +31,7 @@ export const config = {
   root: ROOT,
   publicDir: path.join(ROOT, 'public'),
   dataDir: path.resolve(ROOT, process.env.DATA_DIR || 'data'),
+  uploadsDir: path.resolve(ROOT, process.env.DATA_DIR || 'data', 'uploads'),
   port: Number(process.env.PORT || 8787),
   isProd,
   storageDriver: process.env.STORAGE_DRIVER || 'file',

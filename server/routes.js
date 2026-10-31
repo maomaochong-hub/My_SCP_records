@@ -10,6 +10,7 @@ import {
   rollback, saveDraft, saveVersion, updateWork, workSource,
 } from './works.js';
 import { archiveNow, dailySeries, monthSeries, overview, track } from './stats.js';
+import { saveImageDataUrl } from './uploads.js';
 import { clientIp, dayKey } from './util.js';
 
 const routes = [];
@@ -110,8 +111,11 @@ route('DELETE', '/api/categories/:id', (ctx) => ({ status: 200, body: deleteCate
 
 route('GET', '/api/items', (ctx) => ({ status: 200, body: snapshot(ctx.store).items }), 'public');
 route('POST', '/api/items', (ctx) => ({ status: 201, body: createItem(ctx.store, ctx.body) }), 'owner');
-route('PATCH', '/api/items/:id', (ctx) => ({ status: 200, body: updateItem(ctx.store, ctx.params.id, ctx.body) }), 'owner');
-route('DELETE', '/api/items/:id', (ctx) => ({ status: 200, body: deleteItem(ctx.store, ctx.params.id) }), 'owner');
+route('PATCH', '/api/items/:id', async (ctx) => ({ status: 200, body: await updateItem(ctx.store, ctx.params.id, ctx.body) }), 'owner');
+route('DELETE', '/api/items/:id', async (ctx) => ({ status: 200, body: await deleteItem(ctx.store, ctx.params.id) }), 'owner');
+
+/* ---------------- 配图 ---------------- */
+route('POST', '/api/uploads', async (ctx) => ({ status: 201, body: await saveImageDataUrl(ctx.body.dataUrl) }), 'owner');
 
 route('POST', '/api/notes', (ctx) => ({ status: 201, body: createNote(ctx.store, ctx.body) }), 'owner');
 route('PATCH', '/api/notes/:id/geometry', (ctx) => ({ status: 200, body: updateNoteGeometry(ctx.store, ctx.params.id, ctx.body) }), 'owner');

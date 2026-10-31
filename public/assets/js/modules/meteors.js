@@ -1,31 +1,96 @@
 /* 流星：斜落的星辰
    - 小流星：缓斜、慢速、星核微闪
    - 大流星：更快更陡，自带光晕，经过文字时按距离提亮
-   - 大流星沿路撞到小流星，小流星当场消失（留一瞬闪光） */
+   - 大流星沿路撞到小流星，小流星当场消失（留一瞬闪光）
+
+   调试开关（写在地址栏）：
+     /?meteors=on    忽略「减少动效」，强制播放
+     /?meteors=test  强制播放 + 密集生成，用来确认效果
+     /?meteors=off   完全关闭
+   控制台：SCP_METEORS.diagnose() / SCP_METEORS.start() / SCP_METEORS.burst(3)
+*/
 
 import { reduceMotion } from '../core/ui.js';
 
-const BIG_RATE = 0.16;      // 每次生成时成为大流星的概率
-const BIG_COOLDOWN = 20000; // 两颗大流星之间的最小间隔
-const EAT_RADIUS = 52;      // 吞噬判定半径
-const MAX_SMALL = 3;
-const LIGHT_R = 380;        // 照亮半径（像素）
+const MODE = (new URLSearchParams(location.search).get('meteors') || '').toLowerCase();
+const TEST = MODE === 'test';
+const FORCED = MODE === 'on' || TEST;
 
-export function mountMeteors(root) {
-  if (reduceMotion()) return null;
-  const field = root.querySelector('.meteor-field');
-  const glare = root.querySelector('.glare');
-  if (!field || !glare) return null;
+const BIG_RATE = TEST ? 0.5 : 0.18;        // 每次生成时成为大流星的概率
+const BIG_COOLDOWN = TEST ? 1200 : 18000;  // 两颗大流星之间的最小间隔
+const EAT_RADIUS = 52;                     // 吞噬判定半径
+const MAX_SMALL = TEST ? 6 : 3;
+const LIGHT_R = 380;                       // 照亮半径（像素）
+const GAP = TEST ? [700, 1100] : [1700, 4200];
+const FIRST_AT = TEST ? 260 : 1400;        // 打开后第一颗的时间
+
+/** 引擎状态：给诊断用 */
+const state = {
+  mounted: false,
+  reason: '',
+  active: null,
+  field: null,
+  burst: () => 0,
+};
+
+export function mountMeteors(root, opts = {}) {
+  const field = root && root.querySelector('.meteor-field');
+  const glare = root && root.querySelector('.glare');
+
+  if (MODE === 'off') {
+    document.documentElement.classList.add('meteor-off');
+    state.reason = '地址栏带了 ?meteors=off';
+    return null;
+  }
+  if (!field) {
+    state.reason = '页面上没有 .meteor-field（次页本来就没有，只有首页有）';
+    return null;
+  }
+  if (!glare) {
+    state.reason = '页面上没有 .glare 照亮层';
+    return null;
+  }
+  if (field.dataset.meteorOn === '1') {
+    state.reason = '已经挂载过了，不重复挂载';
+    return null;
+  }
+
+  // 关键：系统开「减少动效」不等于不画流星，只是画得更慢、更少。
+  // （以前这里直接 return，导致很多人完全看不到流星，也没有任何提示。）
+  const soft = !opts.force && !FORCED && reduceMotion();
+  const maxSmall = soft ? 2 : MAX_SMALL;
+  const gap = soft ? [3800, 7200] : GAP;
+  const bigRate = soft ? 0.09 : BIG_RATE;
+  const bigCooldown = soft ? 26000 : BIG_COOLDOWN;
+  const speedScale = soft ? 0.55 : 1;
+
+  field.dataset.meteorOn = '1';
+  state.mounted = true;
+  state.reason = '';
+  state.field = field;
 
   seedStars(root.querySelector('.starfield'));
 
+  // 带 ?debug 时把关键状态写进 <html data-meteor-diag>，不用开控制台也能查
+  if (location.search.includes('debug')) {
+    const st = getComputedStyle(field);
+    document.documentElement.dataset.meteorDiag = [
+      'mounted', field.clientWidth + 'x' + field.clientHeight,
+      'pos=' + st.position, 'z=' + st.zIndex,
+      'reduce=' + (reduceMotion() ? 1 : 0),
+      'forced=' + (FORCED ? 1 : 0),
+    ].join(' ');
+  }
+
   const active = [];
+  state.active = active;
   let raf = null;
   let timer = null;
   let stopped = false;
   let lastBig = 0;
   let glareEnv = 0;
   let textBox = null;
+  let firstSpawn = true;
 
   const rand = (a, b) => a + Math.random() * (b - a);
   const clamp01 = (v) => Math.max(0, Math.min(1, v));
@@ -33,7 +98,7 @@ export function mountMeteors(root) {
   function schedule() {
     clearTimeout(timer);
     if (stopped) return;
-    timer = setTimeout(spawn, rand(2600, 6200));
+    timer = setTimeout(spawn, rand(gap[0], gap[1]));
   }
 
   function spawn() {
@@ -47,19 +112,23 @@ export function mountMeteors(root) {
     const bigs = active.reduce((n, m) => n + (m.big ? 1 : 0), 0);
     const smalls = active.length - bigs;
 
-    if (Math.random() < BIG_RATE && bigs === 0 && now - lastBig > BIG_COOLDOWN) {
-      create(true, w, h, now);
+    // 第一颗一定从画面中央掠过：打开页面 1.4 秒内就能确认「流星是有的」
+    const aimFirst = firstSpawn;
+    firstSpawn = false;
+
+    if (Math.random() < bigRate && bigs === 0 && now - lastBig > bigCooldown) {
+      create(true, w, h, now, aimFirst);
       lastBig = now;
-    } else if (smalls < MAX_SMALL) {
-      create(false, w, h, now);
+    } else if (smalls < maxSmall) {
+      create(false, w, h, now, aimFirst);
     }
 
     schedule();
     if (!raf) raf = requestAnimationFrame(tick);
   }
 
-  function create(big, w, h, now) {
-    // 方向：默认左上←右下（与水平线 10°–34° ），少量反向
+  function create(big, w, h, now, aimText) {
+    // 方向：默认左上←右下（与水平线 10°–34°），少量反向
     let deg;
     if (big) {
       // 大流星走得陡些，轨迹才可能落进句子所在的画面中段
@@ -71,14 +140,14 @@ export function mountMeteors(root) {
     const dirX = Math.cos(rad);
     const dirY = Math.sin(rad);
 
-    const len = big ? rand(215, 320) : rand(95, 190);
-    const hh = big ? 13 : 9;
-    const speed = big ? rand(1150, 1650) : rand(520, 820);
+    const len = big ? rand(215, 320) : rand(120, 230);
+    const hh = big ? 14 : 11;
+    const speed = (big ? rand(1150, 1650) : rand(520, 820)) * speedScale;
     const y0 = -14;
 
     // 起点：贴着视口上缘之外
     let x0;
-    const aim = big && Math.random() < 0.62 ? textCenter(w, h) : null;
+    const aim = aimText || (big && Math.random() < 0.62) ? textCenter(w, h) : null;
     if (aim) {
       // 反推起点，使轨迹正好掠过句子中心——否则大流星大多从句子左侧飞走，照亮效果根本看不到
       x0 = aim.x - (dirX / dirY) * (aim.y - y0);
@@ -144,7 +213,7 @@ export function mountMeteors(root) {
 
       // 透明度包络：快速淡入、末段淡出
       const env = p < 0.08 ? p / 0.08 : p > 0.82 ? (1 - p) / 0.18 : 1;
-      const base = clamp01(env) * (m.big ? 1 : 0.78);
+      const base = clamp01(env) * (m.big ? 1 : 0.95);
       m.el.style.opacity = base.toFixed(3);
 
       // 星核呼吸：±12%
@@ -237,8 +306,21 @@ export function mountMeteors(root) {
 
   window.addEventListener('resize', () => { textBox = null; }, { passive: true });
 
-  timer = setTimeout(spawn, 2200);
-  return { stop() { stopped = true; clearTimeout(timer); reset(); } };
+  state.burst = (n = 3) => {
+    const w = field.clientWidth;
+    const h = field.clientHeight;
+    for (let i = 0; i < n; i++) {
+      const now = performance.now();
+      setTimeout(() => { if (!stopped) { create(i === 0, w, h, performance.now()); if (!raf) raf = requestAnimationFrame(tick); } }, i * 240);
+    }
+    return n;
+  };
+
+  timer = setTimeout(spawn, FIRST_AT);
+  // 首屏多给一颗，避免「打开后很久没东西」的错觉
+  setTimeout(() => { if (!stopped && active.length < 1) spawn(); }, FIRST_AT + 1500);
+
+  return { stop() { stopped = true; clearTimeout(timer); reset(); field.dataset.meteorOn = ''; } };
 }
 
 /** 常驻星尘：几乎察觉不到的 1px 微星 */
@@ -254,4 +336,80 @@ function seedStars(layer) {
     html += `<i class="star" style="left:${left}%;top:${top}%;animation-duration:${dur}s;animation-delay:-${delay}s"></i>`;
   }
   layer.innerHTML = html;
+}
+
+/* =========================================================
+   诊断：在浏览器控制台输入 SCP_METEORS.diagnose()
+   它会把「为什么看不见」直接说出来，不用猜
+   ========================================================= */
+
+function line(label, value, ok) {
+  const mark = ok === undefined ? '·' : ok ? '[OK]  ' : '[!!]  ';
+  return `${mark}${label}: ${value}`;
+}
+
+export function diagnose() {
+  const field = document.querySelector('.meteor-field');
+  const glare = document.querySelector('.glare');
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cs = field ? getComputedStyle(field) : null;
+  const count = field ? field.querySelectorAll('.meteor').length : 0;
+  const stars = document.querySelectorAll('.star').length;
+
+  const rows = [
+    line('页面', location.pathname + location.search),
+    line('系统偏好减少动效', reduce ? '是（流星会变慢、变少，但不会消失）' : '否', true),
+    line('找到了 .meteor-field', field ? '是' : '否', !!field),
+    line('舞台尺寸', field ? `${field.clientWidth} × ${field.clientHeight}` : '—', field ? field.clientWidth > 0 && field.clientHeight > 0 : false),
+    line('舞台 position', cs ? cs.position : '—', cs ? cs.position === 'absolute' : false),
+    line('舞台 display', cs ? cs.display : '—', cs ? cs.display !== 'none' : false),
+    line('找到了 .glare 照亮层', glare ? '是' : '否', !!glare),
+    line('引擎已挂载', state.mounted ? '是' : '否', state.mounted),
+    line('未挂载原因', state.reason || '（无）', state.mounted ? undefined : false),
+    line('当前流星数', String(count)),
+    line('常驻星尘数', String(stars)),
+    line('地址栏开关', MODE || '（无）'),
+  ];
+
+  console.log('%cSCP 流星诊断', 'font:600 13px system-ui;color:#d8443a');
+  console.log(rows.join('\n'));
+
+  if (!field) {
+    console.log('%c结论：这一页不是首页（次页 /stage/ 设计上就没有流星），回到 / 再看。', 'color:#e0b020');
+  } else if (cs && cs.display === 'none') {
+    console.log('%c结论：流星层被 CSS 隐藏了（display:none）。检查是否访问了 ?meteors=off。', 'color:#e0b020');
+  } else if (!state.mounted) {
+    console.log('%c结论：引擎没挂上，原因见上一行「未挂载原因」。可以试 SCP_METEORS.start() 强制启动。', 'color:#e0b020');
+  } else if (count === 0) {
+    console.log('%c结论：引擎在跑，但这一刻正好没有流星（间隔 2–5 秒）。\n'
+      + '  想立刻看到：输入 SCP_METEORS.burst(3)', 'color:#e0b020');
+  } else {
+    console.log('%c结论：正常，画面里现在有 ' + count + ' 颗流星在飞。', 'color:#4caf50');
+  }
+
+  return { reduce, hasField: !!field, hasGlare: !!glare, mounted: state.mounted, reason: state.reason, count, stars };
+}
+
+export function start() {
+  const app = document.getElementById('app');
+  if (!app) return false;
+  if (state.mounted) {
+    console.log('已经在跑了。想立刻看到流星：SCP_METEORS.burst(3)');
+    return true;
+  }
+  const r = mountMeteors(app, { force: true });
+  console.log(r ? '已强制启动流星（忽略系统的减少动效设置）。' : '启动失败：' + (state.reason || '未知原因'));
+  return !!r;
+}
+
+export function burst(n = 3) {
+  if (!state.mounted) {
+    console.log('引擎未运行，先输入 SCP_METEORS.start()');
+    return 0;
+  }
+  return state.burst(n);
+}
+
+if (typeof window !== 'undefined') {
+  window.SCP_METEORS = { diagnose, start, burst };
 }

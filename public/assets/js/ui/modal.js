@@ -1,11 +1,12 @@
-/* 弹窗：条目编辑 / 登录 */
+/* 弹窗：通用外壳 / 确认框 / 登录 */
 
-import { $, esc, toast } from '../core/ui.js';
-import { api, login } from '../core/api.js';
-import { store } from '../core/store.js';
+import { esc, toast } from '../core/ui.js';
+import { login } from '../core/api.js';
 
 let modalEl = null;
 let onCloseHook = null;
+/** 有阻塞式子弹窗（确认框）打开时，底层弹窗不响应 Esc */
+let blocking = 0;
 
 function ensure() {
   if (modalEl) return modalEl;
@@ -35,19 +36,25 @@ function ensure() {
     if (e.target.closest('[data-modal-close]')) closeModal();
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && modalEl && !modalEl.hidden) closeModal();
+    if (e.key !== 'Escape' || !modalEl || modalEl.hidden || blocking) return;
+    closeModal();
   });
   return modalEl;
 }
 
 export function closeModal() {
-  if (!modalEl) return;
+  if (!modalEl || blocking) return;
   modalEl.hidden = true;
-  modalEl.querySelector('#modalForm').reset();
+  const form = modalEl.querySelector('#modalForm');
+  if (form) form.reset();
   if (onCloseHook) { const fn = onCloseHook; onCloseHook = null; fn(); }
 }
 
-function show({ kicker, title, body, submit = '保存', hint = '', width = '', onSubmit }) {
+/**
+ * 打开通用弹窗外壳。body 为表单内容 HTML。
+ * onSubmit(fd, el) 抛错时，错误文案会写进弹窗内的 .field__err。
+ */
+export function show({ kicker, title, body, submit = '保存', hint = '', width = '', onSubmit, submitTone = '' }) {
   const el = ensure();
   el.querySelector('#modalKicker').textContent = kicker;
   el.querySelector('#modalTitle').textContent = title;
@@ -59,10 +66,12 @@ function show({ kicker, title, body, submit = '保存', hint = '', width = '', o
   const form = el.querySelector('#modalForm');
   const btn = el.querySelector('#modalSubmit');
   btn.textContent = submit;
+  btn.classList.toggle('btn--danger', submitTone === 'danger');
   btn.disabled = false;
 
   const handler = async (e) => {
     e.preventDefault();
+    if (btn.disabled) return;
     btn.disabled = true;
     try {
       await onSubmit(new FormData(form), el);
@@ -79,73 +88,65 @@ function show({ kicker, title, body, submit = '保存', hint = '', width = '', o
 
   el.hidden = false;
   setTimeout(() => {
-    const first = el.querySelector('input, textarea, select');
+    const first = el.querySelector('#modalBody input:not([type=file]), #modalBody textarea, #modalBody select');
     if (first) first.focus();
   }, 60);
   return el;
 }
 
-/* ---------------- 条目 ---------------- */
-export function openItemModal({ item, categories, onSaved }) {
-  const editing = !!item;
-  const options = categories
-    .map((c) => `<option value="${esc(c.id)}" ${item && item.catId === c.id ? 'selected' : ''}>${esc(c.name)}</option>`)
-    .join('');
-  const body = `
-    <div class="field">
-      <label for="f-code">编号 / CODE</label>
-      <input id="f-code" name="code" placeholder="SCP-XXXX" spellcheck="false" value="${esc(item?.code || '')}">
-    </div>
-    <div class="field">
-      <label for="f-title">名称 / TITLE *</label>
-      <input id="f-title" name="title" placeholder="条目名称" maxlength="100" value="${esc(item?.title || '')}">
-    </div>
-    <div class="field">
-      <label for="f-url">链接 / URL</label>
-      <input id="f-url" name="url" placeholder="https://scp-wiki-cn.wikidot.com/..." spellcheck="false" value="${esc(item?.url || '')}">
-    </div>
-    <div class="field">
-      <label for="f-cat">分类 / CATEGORY</label>
-      <select id="f-cat" name="catId">
-        ${options}
-        <option value="" ${!item || !item.catId ? 'selected' : ''}>未分类</option>
-      </select>
-    </div>
-    <div class="field">
-      <label for="f-note">备注 / NOTE</label>
-      <textarea id="f-note" name="note" rows="3" placeholder="为什么收藏它？">${esc(item?.note || '')}</textarea>
-    </div>
-    <div class="field__err" id="modalErr"></div>`;
+/* ---------------- 确认框 ---------------- */
+/**
+ * 阻塞式二选一，返回 Promise<boolean>。
+ * 不做成 show() 的变体，因为它要叠在编辑弹窗上面。
+ */
+export function askConfirm({
+  kicker = 'CONFIRM', title, body = '', yes = '确定', no = '取消', tone = 'normal',
+} = {}) {
+  return new Promise((resolve) => {
+    blocking++;
+    const wrap = document.createElement('div');
+    wrap.className = 'modal ask';
+    wrap.setAttribute('role', 'dialog');
+    wrap.setAttribute('aria-modal', 'true');
+    wrap.innerHTML = `
+      <div class="modal__bd" data-ask="no"></div>
+      <div class="modal__pn modal__pn--sm">
+        <header class="modal__hd">
+          <span class="modal__k">${esc(kicker)}</span>
+          <h2 class="modal__t">${esc(title || '')}</h2>
+        </header>
+        ${body ? `<div class="ask__body">${body}</div>` : ''}
+        <footer class="modal__ft">
+          <span class="modal__hint"></span>
+          <button class="btn" type="button" data-ask="no">${esc(no)}</button>
+          <button class="btn ${tone === 'danger' ? 'btn--danger' : 'btn--primary'}" type="button" data-ask="yes">${esc(yes)}</button>
+        </footer>
+      </div>`;
+    (document.getElementById('modal-root') || document.body).appendChild(wrap);
 
-  show({
-    kicker: editing ? 'EDIT RECORD' : 'NEW RECORD',
-    title: editing ? '编辑记录' : '新建项目',
-    body,
-    submit: editing ? '保存修改' : '保存记录',
-    hint: '保存后写入服务器，所有访客同步可见',
-    onSubmit: async (fd) => {
-      const payload = {
-        code: String(fd.get('code') || '').trim() || '—',
-        title: String(fd.get('title') || '').trim(),
-        url: String(fd.get('url') || '').trim(),
-        catId: String(fd.get('catId') || '') || null,
-        note: String(fd.get('note') || '').trim(),
-      };
-      if (!payload.title) {
-        const errEl = document.getElementById('modalErr');
-        if (errEl) errEl.textContent = '请填写名称';
-        document.getElementById('f-title')?.focus();
-        throw new Error('请填写名称');
-      }
-      const saved = editing
-        ? await api.patch(`/api/items/${item.id}`, payload)
-        : await api.post('/api/items', payload);
-      const normalized = { ...saved, id: saved.id || saved._id };
-      store.replaceItem(normalized);
-      closeModal();
-      toast(editing ? '记录已更新' : '记录已归档');
-      if (onSaved) onSaved(normalized);
-    },
+    let settled = false;
+    const done = (v) => {
+      if (settled) return;
+      settled = true;
+      blocking = Math.max(0, blocking - 1);
+      document.removeEventListener('keydown', onKey);
+      wrap.remove();
+      resolve(v);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); done(false); }
+      if (e.key === 'Enter') { e.preventDefault(); done(true); }
+    };
+    wrap.addEventListener('click', (e) => {
+      const hit = e.target.closest('[data-ask]');
+      if (!hit) return;
+      done(hit.dataset.ask === 'yes');
+    });
+    document.addEventListener('keydown', onKey);
+    setTimeout(() => {
+      const b = wrap.querySelector('[data-ask="yes"]');
+      if (b) b.focus();
+    }, 40);
   });
 }
 

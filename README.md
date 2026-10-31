@@ -29,7 +29,7 @@
 | --- | --- | --- |
 | **首页** | `/` | 大字 `S_C_P` 字标、红色待删除标记、中央递归徽记；一句 `Per Aspera Ad Astra` 叠在徽记中心，句子的左下角与右上角各浮出一个半角方框；悬停句距拉开、出现细线，点击进入次页。小流星持续斜落，约每半分钟一颗大流星 |
 | **次页** | `/stage/` | 与首页同一套骨架，只把这句换成一竖排三入口（编号 / 板块 / 计数）；**没有流星** |
-| **项目收集** | `/archive/` | 自建分类（可删，条目自动落入「未分类」）、条目增删改、按编号/名称/备注/域名检索、按分类筛选 |
+| **项目收集** | `/archive/` | 条目六段式新建（编号 / 名称 / 链接 / 分类 / 备注 / 配图）、多分类归属与展示名、编辑前可保留副本到 `SCP-6183-A`、含/排除双模检索、随机页面 |
 | **灵感写作** | `/writing/` | 浮动便签：拖动、置顶、就地编辑、自动保存；**网页创作用于便签下方**：HTML/CSS/JS 三标签 + 沙箱实时预览 + 版本快照 + 回滚 |
 | **其他** | `/other/` | 预留板块：三个占位槽 + 可编辑备注 |
 | **访客统计** | `/stats/` | 今日 / 当月 / 总计 UV、近 30 天柱状、历史月度列表（仅所有者） |
@@ -39,6 +39,16 @@
 - 所有者：邮箱 + 密码登录（scrypt 加盐、httpOnly Cookie），可编辑全部内容、查看统计。
 - 访客：无需登录，只能读；所有写接口对匿名请求返回 401，前端隐藏编辑按钮只是顺带的 UX。
 - 网页作品只对所有者可见，预览在 `sandbox` 不透明源里渲染，脚本碰不到主站。
+
+**项目收集的几条约定**
+
+- **一个条目可以属于多个分类**。卡片右上角显示的是「展示名」，可以和它真正所属的全部分类不同；在卡片分类名下方点「编辑分类」勾选即可，最下方下拉框决定展示名，留空则取最上面被勾选的那一项。
+- **改之前先留底**。点「编辑完成」会先问要不要把改动前的那一份复制到 `SCP-6183-A`。这个分类是系统内置的：永远沉在最底部、不能改名也不能删，初始为空，点进去会有一层轻微噪点。
+- **`SCP-6183-A` 里的副本不计入「全部项目」**，只在它自己的分类页出现，避免同一份内容在总表里出现两遍。
+- **配图在浏览器里处理**：选图后本地完成去背景（从四边泛洪吃掉与边框同色的区域，再对边缘羽化）、裁掉透明边、统一成正方形，才上传这张处理后的 PNG。原图不会离开你的电脑。
+- **检索**：空格分隔表示同时满足，`-词` 表示排除，`"短语"` 表示精确片段；上方「筛选 / 排除」两个按钮切换整体语义——筛选是只看命中项，排除是只看未命中项。检索范围含分类名、编号、名称、备注。
+- **随机页面**在标题左侧，从已收录且有链接的条目里随机抽一条跳过去；一条链接都没有时回到 SCP 中文维基首页。
+- 「返回索引」只回上一页（浏览器后退）；要回首页点左上角的 `SCP FOUNDATION / PERSONAL TERMINAL`。
 
 ## 快速开始
 
@@ -53,10 +63,16 @@ npm run seed
 
 # 3. 启动
 npm start          # 或 npm run dev（文件监听）
-# 打开 http://localhost:8787
+# 打开 http://127.0.0.1:8787
 ```
 
 没有 `npm install` 这一步——服务端零第三方依赖，只用 Node 内置模块（`node:http` / `node:crypto` / `node:fs`）。要求 Node ≥ 20。
+
+> 第一次接触这套代码、或者想连「买域名之后怎么上线」一起看，读 **[docs/getting-started.md](docs/getting-started.md)**：从生成密钥、启动、登录，到流星为什么不出现、域名与 HTTPS 的注意事项，都写成了逐步操作。
+
+> 用 `127.0.0.1` 而不是 `localhost`：两者是两个不同的源，Cookie 不共享（会表现为「登录了但换个地址又变访客」）；本机若挂了代理，`localhost` 还可能被拦成 502。
+
+**端口被占用**（`EADDRINUSE: address already in use :::8787`）：多半是上一次 `npm run dev` 没停干净。`predev` / `prestart` 会先跑 `scripts/check-port.js`，直接告诉你是哪个 PID 占着，照着输出里的命令结束它即可；也可以换端口 `$env:PORT=8788; npm run dev`（PowerShell）/ `PORT=8788 npm run dev`（bash）。
 
 > 首次打开会写入 2 条示例便签、3 条示例条目和 1 个示例网页作品，可直接在界面里删除。
 
@@ -101,6 +117,7 @@ npm start          # 或 npm run dev（文件监听）
 │   ├── storage.js             文件驱动（内存 + 原子落盘）
 │   └── util.js                加密 / 时间 / 校验 / Cookie
 ├── scripts/seed.js            初始化与重置口令
+├── scripts/check-port.js      启动前的端口占用检查
 ├── test/api.test.js           鉴权、内容、作品、统计冒烟测试
 ├── data/                      运行时数据（gitignore）
 └── Dockerfile
@@ -114,8 +131,9 @@ npm start          # 或 npm run dev（文件监听）
 | --- | --- | --- |
 | 会话 | `POST /auth/login`、`POST /auth/logout`、`GET /auth/session`、`POST /auth/password` | 公开 / 所有者 |
 | 内容 | `GET /content`（ETag）、`GET /content/summary`、`GET /export`、`POST /import` | 读公开，写所有者 |
-| 分类 | `POST /categories`、`PATCH /categories/:id`、`DELETE /categories/:id` | 所有者 |
+| 分类 | `POST /categories`、`PATCH /categories/:id`、`DELETE /categories/:id`（`cat_6183a` 为系统归档分类，锁定不可改删） | 所有者 |
 | 条目 | `GET /items`、`POST /items`、`PATCH /items/:id`、`DELETE /items/:id` | 读公开，写所有者 |
+| 配图 | `POST /uploads`（dataURL 落盘）、`GET /media/:name` | 写所有者，读公开 |
 | 便签 | `POST /notes`、`PATCH /notes/:id`、`PATCH /notes/:id/geometry`、`DELETE /notes/:id` | 所有者 |
 | 设置 | `PATCH /settings` | 所有者 |
 | 作品 | `GET/POST /works`、`GET/PATCH/DELETE /works/:id`、`PUT /works/:id/draft`、`POST/GET /works/:id/versions`、`POST /works/:id/rollback` | 所有者 |
@@ -139,7 +157,21 @@ npm start          # 或 npm run dev（文件监听）
 - 流星斜落（与水平线 10°–34°），头部是星核 + 十字星芒 + 呼吸微闪，拖尾用一张亮度→透明度处理过的星轨精灵，纵向柔化靠图片自身的衰减，所以是「一道光」而不是一条直线。
 - 大流星（约每 20–40 秒一颗）带光晕，以 1150–1650 px/s 掠过；轨迹有 62% 的概率反推起点让它**正好穿过中央那句话**，否则效果基本看不到。沿途进入 52px 半径的小流星会被当场吞掉，留一瞬闪光。
 - 照亮是**真的照亮**：`.glare` 是整页内容的克隆层（白字 + 更强光晕 + 一小片曝光池），用径向遮罩跟随流星头部；透明度按「头部与句子的距离」做包络（380px 内渐亮、飞远渐暗），不是叠一层光斑。没有大流星时指数衰减回零。
-- `prefers-reduced-motion` 下不生成流星、跳过幕布与全部位移动效；入场动画默认不播，只有确认可动效才挂上 `html.motion`，所以关掉动效也不会白屏。
+- `prefers-reduced-motion` 下**仍然生成流星**，只是更慢更少（间隔 3.8–7.2s、速度 ×0.55、同时在飞最多 2 颗）。以前这里是「直接不画」，等于关掉系统动画的用户永远看不到流星，且毫无提示。入场动画默认不播，只有确认可动效才挂上 `html.motion`，所以关掉动效也不会白屏。
+
+### 流星调试开关
+
+| 地址 | 作用 |
+|---|---|
+| `/?meteors=on` | 忽略「减少动效」，按满速播放 |
+| `/?meteors=test` | 满速 + 密集（每 0.7–1.1s 一颗，50% 是大流星），用来确认效果 |
+| `/?meteors=off` | 完全关闭 |
+| `/?debug=1` | 把舞台尺寸等状态写进 `<html data-meteor-diag>`，不打开控制台也能查 |
+
+控制台：`SCP_METEORS.diagnose()` 打印逐项自检、`SCP_METEORS.burst(3)` 立刻放三颗、`SCP_METEORS.start()` 强制启动。
+完整的手把手排查流程见 **[docs/meteor-guide.md](docs/meteor-guide.md)**。
+
+> ⚠️ `.meteor-field` 不能设 `display:none`。一旦隐藏，它的尺寸变成 0×0，JS 读不到宽高就再也不生成流星，而且强制启动也画不出来。要隐藏只能用 `html.meteor-off`。
 
 ## 测试
 

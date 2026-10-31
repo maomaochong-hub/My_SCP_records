@@ -37,7 +37,11 @@ export const store = {
   addCategory(cat) { this.data.categories.push(cat); },
   removeCategory(id) {
     this.data.categories = this.data.categories.filter((c) => c.id !== id);
-    this.data.items.forEach((i) => { if (i.catId === id) i.catId = null; });
+    this.data.items.forEach((i) => {
+      if (Array.isArray(i.catIds)) i.catIds = i.catIds.filter((x) => x !== id);
+      if (i.catId === id) i.catId = (i.catIds && i.catIds[0]) || null;
+      if (i.displayCatId === id) i.displayCatId = (i.catIds && i.catIds[0]) || null;
+    });
   },
   addItem(item) { this.data.items.unshift(item); },
   replaceItem(item) {

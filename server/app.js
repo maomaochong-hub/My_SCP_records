@@ -8,6 +8,7 @@ import { readSession } from './auth.js';
 import { AppError, MIME, clientIp, parseCookies, serializeCookie } from './util.js';
 
 const MAX_BODY = 1024 * 1024;
+const UPLOAD_BODY = 3 * 1024 * 1024;
 
 /* ---------------- 安全响应头 ---------------- */
 const PAGE_CSP = [
@@ -94,18 +95,19 @@ function sendEmpty(res, status, headers = {}) {
   res.end();
 }
 
-async function readBody(req) {
+async function readBody(req, limit = MAX_BODY) {
   const type = String(req.headers['content-type'] || '');
   const len = Number(req.headers['content-length'] || 0);
   if (!type && (req.method === 'DELETE' || len === 0)) return {};
   if (!/^application\/json\b/i.test(type)) {
     throw new AppError(415, 'E_UNSUPPORTED_MEDIA_TYPE', '请求必须是 application/json');
   }
+  if (len > limit) throw new AppError(413, 'E_TOO_LARGE', '请求体过大');
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > MAX_BODY) throw new AppError(413, 'E_TOO_LARGE', '请求体过大');
+    if (size > limit) throw new AppError(413, 'E_TOO_LARGE', '请求体过大');
     chunks.push(chunk);
   }
   if (!size) return {};
@@ -116,11 +118,30 @@ async function readBody(req) {
   }
 }
 
-function expectedOrigin(req) {
-  if (config.publicOrigin) return config.publicOrigin;
+/**
+ * 允许的来源：PUBLIC_ORIGIN 支持逗号分隔多值（本地 + 域名并行、带/不带 www 等）。
+ * 都没配时退回请求自身的 proto://host。
+ */
+function allowedOrigins(req) {
+  const list = String(config.publicOrigin || '')
+    .split(',')
+    .map((s) => s.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+  if (list.length) return list;
   const host = req.headers.host || `localhost:${config.port}`;
   const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0] || (config.cookieSecure ? 'https' : 'http');
-  return `${proto}://${host}`;
+  return [`${proto}://${host}`];
+}
+
+/**
+ * 开发期把 localhost 与 127.0.0.1 视为同一个源：
+ * 同一台机器、同一个端口，只是名字不同，没必要因此拦住登录。
+ * 生产环境要求精确匹配，不放宽。
+ */
+function sameLoopbackHost(a, b) {
+  if (config.isProd) return false;
+  const norm = (u) => String(u).replace('://localhost', '://127.0.0.1');
+  return norm(a) === norm(b);
 }
 
 function checkCsrf(req) {
@@ -131,8 +152,10 @@ function checkCsrf(req) {
     throw new AppError(403, 'E_CSRF', '跨站请求被拒绝');
   }
   const origin = req.headers.origin;
-  if (origin && origin !== expectedOrigin(req)) {
-    throw new AppError(403, 'E_CSRF', '来源校验失败');
+  if (origin) {
+    const allowed = allowedOrigins(req);
+    const ok = allowed.includes(origin) || sameLoopbackHost(allowed[0], origin);
+    if (!ok) throw new AppError(403, 'E_CSRF', '来源校验失败');
   }
 }
 
@@ -178,11 +201,44 @@ async function serveStatic(req, res, pathname) {
   securityHeaders(res, { html: isHtml });
   const url = new URL(req.url, 'http://x');
   const fingerprinted = url.searchParams.has('v');
-  const cache = isHtml ? 'no-cache' : fingerprinted ? 'public, max-age=31536000, immutable' : 'public, max-age=300';
+  // 开发环境一律 no-cache：改完 JS/CSS 普通刷新就能看到，不必记着强制刷新
+  const cache = isHtml
+    ? 'no-cache'
+    : fingerprinted
+      ? 'public, max-age=31536000, immutable'
+      : config.isProd ? 'public, max-age=300' : 'no-cache';
   res.setHeader('Content-Type', MIME[ext] || 'application/octet-stream');
   res.setHeader('Content-Length', stat.size);
   res.setHeader('Cache-Control', cache);
   res.setHeader('Last-Modified', stat.mtime.toUTCString());
+  if (req.method === 'HEAD') { res.writeHead(200); res.end(); return; }
+  res.writeHead(200);
+  fs.createReadStream(file).pipe(res);
+}
+
+/* ---------------- 条目配图 ---------------- */
+const MEDIA_NAME = /^[A-Za-z0-9_-]{4,64}\.(?:png|jpe?g|webp)$/i;
+
+async function serveMedia(req, res, pathname) {
+  const name = pathname.slice('/media/'.length);
+  // 只认扁平文件名：不解析子目录、不接受 . / .. ，路径穿越无从谈起
+  if (!MEDIA_NAME.test(name)) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }).end('Not Found');
+    return;
+  }
+  const file = path.join(config.uploadsDir, name);
+  let stat = null;
+  try { stat = await fsp.stat(file); } catch { /* not found */ }
+  if (!stat || !stat.isFile()) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }).end('Not Found');
+    return;
+  }
+  const ext = path.extname(name).toLowerCase();
+  securityHeaders(res);
+  res.setHeader('Content-Type', MIME[ext] || 'application/octet-stream');
+  res.setHeader('Content-Length', stat.size);
+  // 文件名随机且永不复用，可以放心长缓存
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   if (req.method === 'HEAD') { res.writeHead(200); res.end(); return; }
   res.writeHead(200);
   fs.createReadStream(file).pipe(res);
@@ -242,7 +298,9 @@ export function createServer(store) {
           throw new AppError(401, 'E_AUTH_REQUIRED', '需要所有者登录');
         }
 
-        const body = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) ? await readBody(req) : {};
+        const body = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)
+          ? await readBody(req, pathname === '/api/uploads' ? UPLOAD_BODY : MAX_BODY)
+          : {};
 
         let result;
         try {
@@ -272,6 +330,12 @@ export function createServer(store) {
           return;
         }
         sendJson(res, status, { ok: true, data: result.body });
+        return;
+      }
+
+      /* --- 条目配图（不走 public 目录） --- */
+      if (pathname.startsWith('/media/')) {
+        await serveMedia(req, res, pathname);
         return;
       }
 

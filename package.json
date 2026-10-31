@@ -8,7 +8,9 @@
     "node": ">=20"
   },
   "scripts": {
+    "prestart": "node scripts/check-port.js",
     "start": "node server/server.js",
+    "predev": "node scripts/check-port.js",
     "dev": "node --watch server/server.js",
     "seed": "node scripts/seed.js",
     "test": "node --test test/*.test.js"

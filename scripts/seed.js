@@ -50,22 +50,22 @@ if (!resetOnly && store.count('items') === 0 && store.count('categories') === 0)
   const now = Date.now();
   const c1 = store.insert('categories', { _id: 'cat_classic', name: '经典条目', sort: 10, createdAt: now, updatedAt: now });
   const c2 = store.insert('categories', { _id: 'cat_sites', name: '站点与工具', sort: 20, createdAt: now, updatedAt: now });
+  // 归档分类：固定沉底、不可删除，存放被修改前的旧条目
+  store.insert('categories', {
+    _id: 'cat_6183a', name: 'SCP-6183-A', sort: 1e9, locked: true, createdAt: now, updatedAt: now,
+  });
 
-  store.insert('items', {
-    _id: 'it_scp_wiki', catId: c2._id, code: '—', title: 'SCP 基金会中文维基',
-    url: 'https://scp-wiki-cn.wikidot.com/', note: '主站入口，所有条目的源头。',
-    createdAt: now - 3000, updatedAt: now - 3000,
+  const seedItem = (id, catId, code, title, url, note, ts) => store.insert('items', {
+    _id: id, catId, catIds: [catId], displayCatId: catId, code, title, url, note, image: '',
+    snapshotOf: null, createdAt: ts, updatedAt: ts,
   });
-  store.insert('items', {
-    _id: 'it_scp_6183', catId: c1._id, code: 'SCP-6183', title: '本终端的视觉参考',
-    url: 'https://scp-wiki-cn.wikidot.com/scp-6183', note: '配色、字体与版式均由此页面取意。',
-    createdAt: now - 2000, updatedAt: now - 2000,
-  });
-  store.insert('items', {
-    _id: 'it_scp_173', catId: c1._id, code: 'SCP-173', title: '雕像',
-    url: 'https://scp-wiki-cn.wikidot.com/scp-173', note: '第一条被写下的项目，值得反复重读。',
-    createdAt: now - 1000, updatedAt: now - 1000,
-  });
+
+  seedItem('it_scp_wiki', c2._id, '—', 'SCP 基金会中文维基',
+    'https://scp-wiki-cn.wikidot.com/', '主站入口，所有条目的源头。', now - 3000);
+  seedItem('it_scp_6183', c1._id, 'SCP-6183', '本终端的视觉参考',
+    'https://scp-wiki-cn.wikidot.com/scp-6183', '配色、字体与版式均由此页面取意。', now - 2000);
+  seedItem('it_scp_173', c1._id, 'SCP-173', '雕像',
+    'https://scp-wiki-cn.wikidot.com/scp-173', '第一条被写下的项目，值得反复重读。', now - 1000);
 
   store.insert('notes', {
     _id: 'nt_welcome', title: '欢迎 · 在这里记录灵感',

@@ -1,5 +1,6 @@
 import { fail, httpUrl, num, str } from './util.js';
 import { newId } from './util.js';
+import { removeImageIfUnused } from './uploads.js';
 
 const MAX = {
   catName: 24,
@@ -9,7 +10,14 @@ const MAX = {
   noteTitle: 120,
   noteBody: 20000,
   remark: 4000,
+  catsPerItem: 16,
 };
+
+/**
+ * 归档分类：修改条目时可以把「改之前的那一份」复制到这里。
+ * 永远沉在列表最底部，不可重命名、不可删除，初始为空。
+ */
+export const ARCHIVE_CAT = { id: 'cat_6183a', name: 'SCP-6183-A', sort: 1e9 };
 
 export function settings(store) {
   let s = store.get('settings', 'site');
@@ -25,6 +33,68 @@ export function settings(store) {
   return s;
 }
 
+/** 归档分类缺失时即时补齐（老库存量数据无需迁移脚本） */
+export function ensureArchiveCategory(store) {
+  let cat = store.get('categories', ARCHIVE_CAT.id);
+  if (cat) {
+    if (!cat.locked) store.update('categories', cat._id, { locked: true, sort: ARCHIVE_CAT.sort });
+    return cat;
+  }
+  const now = Date.now();
+  cat = store.insert('categories', {
+    _id: ARCHIVE_CAT.id,
+    name: ARCHIVE_CAT.name,
+    sort: ARCHIVE_CAT.sort,
+    locked: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+  return cat;
+}
+
+/* ---------------- 条目 / 分类 归一化 ---------------- */
+
+/** 一个条目所属的全部分类；兼容只有 catId 的旧数据 */
+export function itemCatIds(it) {
+  const list = Array.isArray(it.catIds) ? it.catIds.filter(Boolean) : [];
+  if (list.length) return list;
+  return it.catId ? [it.catId] : [];
+}
+
+function displayOf(it, ids) {
+  if (it.displayCatId && ids.includes(it.displayCatId)) return it.displayCatId;
+  return ids[0] || null;
+}
+
+function normImage(v) {
+  const s = str(v, { max: 200 });
+  if (!s) return '';
+  return /^\/media\/[A-Za-z0-9_-]{4,64}\.(png|jpe?g|webp)$/i.test(s) ? s : '';
+}
+
+function normCode(v) {
+  let s = str(v, { max: MAX.itemCode }) || '';
+  s = s.replace(/\s*-\s*/g, '-').replace(/\s+/g, ' ');
+  // 纯 ASCII 编号统一大写：scp-173 → SCP-173
+  if (/^[\x20-\x7e]+$/.test(s)) s = s.toUpperCase();
+  return s || '—';
+}
+
+/** 过滤非法分类 id、去重、保序；空则退回旧 catId */
+function normIds(store, raw, fallback) {
+  const list = Array.isArray(raw) ? raw : raw == null ? [] : [raw];
+  const ids = [];
+  for (const v of list) {
+    const id = str(v, { max: 40 });
+    if (!id || ids.includes(id)) continue;
+    if (!store.get('categories', id)) continue;
+    ids.push(id);
+    if (ids.length >= MAX.catsPerItem) break;
+  }
+  if (!ids.length && fallback && store.get('categories', fallback)) ids.push(fallback);
+  return ids;
+}
+
 function bump(store) {
   const s = settings(store);
   store.update('settings', 'site', {
@@ -36,6 +106,7 @@ function bump(store) {
 
 export function snapshot(store) {
   const s = settings(store);
+  ensureArchiveCategory(store);
   const strip = (d) => {
     const { _id, ...rest } = d;
     return { id: _id, ...rest };
@@ -46,7 +117,17 @@ export function snapshot(store) {
   return {
     version: s.contentVersion,
     categories: cats.map(strip),
-    items: items.map(strip),
+    items: items.map((it) => {
+      const ids = itemCatIds(it);
+      return {
+        ...strip(it),
+        catIds: ids,
+        catId: ids[0] || null,
+        displayCatId: displayOf(it, ids),
+        image: normImage(it.image),
+        snapshotOf: it.snapshotOf || null,
+      };
+    }),
     notes: notes.map(strip),
     other: s.other || { remark: '' },
     updatedAt: s.updatedAt || Date.now(),
@@ -54,6 +135,7 @@ export function snapshot(store) {
 }
 
 export function summary(store) {
+  ensureArchiveCategory(store);
   return {
     items: store.count('items'),
     categories: store.count('categories'),
@@ -65,8 +147,10 @@ export function summary(store) {
 
 /* ---------------- 分类 ---------------- */
 export function createCategory(store, body) {
+  ensureArchiveCategory(store);
   const name = str(body.name, { max: MAX.catName, min: 1 });
   if (!name) fail(400, 'E_VALIDATION', '分类名称不能为空', { field: 'name' });
+  if (name.toUpperCase() === ARCHIVE_CAT.name.toUpperCase()) fail(409, 'E_CONFLICT', '该分类为系统保留名称');
   if (store.all('categories').some((c) => c.name === name)) fail(409, 'E_CONFLICT', '分类已存在');
   const now = Date.now();
   const doc = store.insert('categories', {
@@ -79,6 +163,7 @@ export function createCategory(store, body) {
 export function updateCategory(store, id, body) {
   const doc = store.get('categories', id);
   if (!doc) fail(404, 'E_NOT_FOUND', '分类不存在');
+  if (doc.locked) fail(400, 'E_LOCKED', '系统归档分类不可修改');
   const patch = {};
   if (body.name != null) {
     const name = str(body.name, { max: MAX.catName, min: 1 });
@@ -94,11 +179,19 @@ export function updateCategory(store, id, body) {
 }
 
 export function deleteCategory(store, id) {
-  if (!store.get('categories', id)) fail(404, 'E_NOT_FOUND', '分类不存在');
+  const doc = store.get('categories', id);
+  if (!doc) fail(404, 'E_NOT_FOUND', '分类不存在');
+  if (doc.locked) fail(400, 'E_LOCKED', '系统归档分类不可删除');
   store.remove('categories', id);
   let moved = 0;
   for (const item of store.all('items')) {
-    if (item.catId === id) { item.catId = null; moved++; }
+    const ids = itemCatIds(item);
+    if (!ids.includes(id)) continue;
+    const next = ids.filter((x) => x !== id);
+    item.catIds = next;
+    item.catId = next[0] || null;
+    if (item.displayCatId === id) item.displayCatId = next[0] || null;
+    moved++;
   }
   bump(store);
   return { removed: true, movedItems: moved };
@@ -106,18 +199,22 @@ export function deleteCategory(store, id) {
 
 /* ---------------- 条目 ---------------- */
 export function createItem(store, body) {
+  ensureArchiveCategory(store);
   const title = str(body.title, { max: MAX.itemTitle, min: 1 });
   if (!title) fail(400, 'E_VALIDATION', '名称不能为空', { field: 'title' });
-  const catId = str(body.catId, { max: 40 }) || null;
-  if (catId && !store.get('categories', catId)) fail(400, 'E_VALIDATION', '分类不存在', { field: 'catId' });
+  const catIds = normIds(store, body.catIds != null ? body.catIds : body.catId, null);
   const now = Date.now();
   const doc = store.insert('items', {
     _id: newId('it'),
-    catId,
-    code: str(body.code, { max: MAX.itemCode }) || '—',
+    catId: catIds[0] || null,
+    catIds,
+    displayCatId: displayOf({ displayCatId: str(body.displayCatId, { max: 40 }) }, catIds),
+    code: normCode(body.code),
     title,
     url: httpUrl(body.url),
     note: str(body.note, { max: MAX.itemNote }),
+    image: normImage(body.image),
+    snapshotOf: str(body.snapshotOf, { max: 40 }) || null,
     createdAt: now,
     updatedAt: now,
   });
@@ -125,7 +222,8 @@ export function createItem(store, body) {
   return doc;
 }
 
-export function updateItem(store, id, body) {
+export async function updateItem(store, id, body) {
+  ensureArchiveCategory(store);
   const doc = store.get('items', id);
   if (!doc) fail(404, 'E_NOT_FOUND', '条目不存在');
   const patch = {};
@@ -134,23 +232,34 @@ export function updateItem(store, id, body) {
     if (!title) fail(400, 'E_VALIDATION', '名称不能为空', { field: 'title' });
     patch.title = title;
   }
-  if (body.code != null) patch.code = str(body.code, { max: MAX.itemCode }) || '—';
+  if (body.code != null) patch.code = normCode(body.code);
   if (body.url != null) patch.url = httpUrl(body.url);
   if (body.note != null) patch.note = str(body.note, { max: MAX.itemNote });
-  if (body.catId !== undefined) {
-    const catId = str(body.catId, { max: 40 }) || null;
-    if (catId && !store.get('categories', catId)) fail(400, 'E_VALIDATION', '分类不存在', { field: 'catId' });
-    patch.catId = catId;
+  if (body.image !== undefined) patch.image = normImage(body.image);
+  if (body.catIds !== undefined || body.catId !== undefined) {
+    const catIds = normIds(store, body.catIds != null ? body.catIds : body.catId, null);
+    patch.catIds = catIds;
+    patch.catId = catIds[0] || null;
+    const wantDisplay = str(body.displayCatId, { max: 40 });
+    patch.displayCatId = wantDisplay && catIds.includes(wantDisplay) ? wantDisplay : catIds[0] || null;
+  } else if (body.displayCatId !== undefined) {
+    const catIds = itemCatIds(doc);
+    const wantDisplay = str(body.displayCatId, { max: 40 });
+    patch.displayCatId = wantDisplay && catIds.includes(wantDisplay) ? wantDisplay : catIds[0] || null;
   }
   patch.updatedAt = Date.now();
+  const prevImage = doc.image || '';
   const next = store.update('items', id, patch);
   bump(store);
+  if (prevImage && prevImage !== next.image) await removeImageIfUnused(store, prevImage);
   return next;
 }
 
-export function deleteItem(store, id) {
+export async function deleteItem(store, id) {
+  const doc = store.get('items', id);
   if (!store.remove('items', id)) fail(404, 'E_NOT_FOUND', '条目不存在');
   bump(store);
+  await removeImageIfUnused(store, doc && doc.image);
   return { deleted: true };
 }
 
@@ -235,10 +344,11 @@ export function importAll(store, body) {
   const counts = { categories: 0, items: 0, notes: 0 };
 
   if (mode === 'replace') {
-    store.removeWhere('categories', () => true);
+    store.removeWhere('categories', (c) => !c.locked);
     store.removeWhere('items', () => true);
     store.removeWhere('notes', () => true);
   }
+  ensureArchiveCategory(store);
 
   const catMap = new Map();
   for (const c of Array.isArray(data.categories) ? data.categories : []) {
@@ -257,15 +367,24 @@ export function importAll(store, body) {
   for (const it of data.items) {
     const title = str(it.title, { max: MAX.itemTitle, min: 1 });
     if (!title) continue;
-    const mapped = it.catId ? catMap.get(String(it.catId)) : null;
-    const catId = mapped || (it.catId && store.get('categories', String(it.catId)) ? String(it.catId) : null);
+    const rawIds = Array.isArray(it.catIds) ? it.catIds : it.catId ? [it.catId] : [];
+    const ids = [];
+    for (const raw of rawIds) {
+      const mapped = catMap.get(String(raw)) || (store.get('categories', String(raw)) ? String(raw) : null);
+      if (mapped && !ids.includes(mapped)) ids.push(mapped);
+    }
+    const display = str(it.displayCatId, { max: 40 });
     store.insert('items', {
       _id: newId('it'),
-      catId,
-      code: str(it.code, { max: MAX.itemCode }) || '—',
+      catId: ids[0] || null,
+      catIds: ids,
+      displayCatId: display && ids.includes(catMap.get(display) || display) ? (catMap.get(display) || display) : ids[0] || null,
+      code: normCode(it.code),
       title,
       url: httpUrl(it.url),
       note: str(it.note, { max: MAX.itemNote }),
+      image: normImage(it.image),
+      snapshotOf: str(it.snapshotOf, { max: 40 }) || null,
       createdAt: num(it.createdAt, { def: now }),
       updatedAt: num(it.updatedAt, { def: now }),
     });

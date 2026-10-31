@@ -38,6 +38,15 @@ export function go(href, label) {
 
 export function initNav() {
   document.addEventListener('click', (e) => {
+    // 「返回索引」：只回上一页；没有上一页时才退回引导页
+    const back = e.target.closest('[data-back]');
+    if (back) {
+      e.preventDefault();
+      if (history.length > 1) history.back();
+      else go('/stage/', 'RETURNING / INDEX');
+      return;
+    }
+
     const a = e.target.closest('a[href]');
     if (!a) return;
     if (a.target || a.hasAttribute('download')) return;

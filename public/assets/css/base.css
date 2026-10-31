@@ -170,6 +170,8 @@ html.motion .page > *{animation:pageIn .6s var(--ease) both}
 .btn:hover{color:var(--bg);background:var(--ink);border-color:var(--ink)}
 .btn--primary{color:#f0ede6;border-color:rgba(176,42,32,.55);background:rgba(176,42,32,.13)}
 .btn--primary:hover{background:var(--red);border-color:var(--red);color:#fff}
+.btn--danger{border-color:rgba(216,68,58,.5);color:#e0817a;background:rgba(176,42,32,.08)}
+.btn--danger:hover{background:var(--red-2);border-color:var(--red-2);color:#fff}
 .btn--ghost{border-color:transparent;background:none;color:var(--ink-3);padding:8px 6px}
 .btn--ghost:hover{background:none;border-color:transparent;color:var(--ink)}
 .btn[disabled]{opacity:.4;pointer-events:none}
@@ -230,8 +232,9 @@ select.mini option{background:#0c0f12;color:var(--ink)}
 .modal__bd{position:absolute;inset:0;background:rgba(4,5,6,.8);backdrop-filter:blur(6px);animation:fade .3s}
 .modal__pn{
   position:relative;width:min(520px,100%);max-height:88dvh;overflow:auto;
-  padding:22px 24px 18px;background:#0c0f12;border:1px solid var(--line-2);
+  padding:22px 24px 0;background:#0c0f12;border:1px solid var(--line-2);
   box-shadow:0 50px 100px -40px #000;animation:pop .4s var(--ease) both;
+  overscroll-behavior:contain;
 }
 .modal__pn--sm{width:min(400px,100%)}
 .modal__pn::before{content:"";position:absolute;left:0;top:0;width:100%;height:1px;background:linear-gradient(90deg,var(--red-2),transparent 60%)}
@@ -243,7 +246,13 @@ select.mini option{background:#0c0f12;color:var(--ink)}
   font-family:var(--mono);font-size:11px;color:var(--ink-4);transition:.25s;
 }
 .modal__x:hover{color:var(--ink)}
-.modal__ft{display:flex;align-items:center;gap:10px;margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}
+/* 内容再长，底部动作也始终可见 */
+.modal__ft{
+  position:sticky;bottom:0;z-index:2;
+  display:flex;align-items:center;gap:10px;
+  margin-top:20px;padding:14px 0 16px;border-top:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(12,15,18,.82),#0c0f12 42%);
+}
 .modal__hint{flex:1;font-family:var(--mono);font-size:8.5px;letter-spacing:.16em;color:var(--ink-4);line-height:1.6}
 
 .field{display:flex;flex-direction:column;gap:7px;margin-top:15px}
@@ -262,6 +271,20 @@ select.mini option{background:#0c0f12;color:var(--ink)}
   background-repeat:no-repeat;background-position:right 12px center;
 }
 .field__err{font-family:var(--mono);font-size:9px;letter-spacing:.12em;color:var(--red-2);min-height:14px}
+.field__label{font-family:var(--mono);font-size:8.5px;letter-spacing:.24em;color:var(--ink-4);text-transform:uppercase}
+.field__hint{font-size:10.5px;line-height:1.7;color:var(--ink-4);letter-spacing:.02em}
+.linkbtn{
+  font-family:var(--mono);font-size:9px;letter-spacing:.14em;color:var(--ink-4);
+  text-transform:uppercase;transition:color .25s;
+}
+.linkbtn:hover{color:var(--red-2)}
+
+/* ---------- 确认框（叠在其他弹窗之上） ---------- */
+.ask{z-index:140}
+.ask__body{display:flex;flex-direction:column;gap:9px;padding-top:15px}
+.ask__p{font-size:12.5px;line-height:1.85;color:var(--ink-2);letter-spacing:.02em}
+.ask__p--dim{color:var(--ink-4);font-size:11.5px}
+.ask__p b{color:var(--red-2);font-weight:600}
 
 /* ---------- 滚动揭示 ---------- */
 .reveal{opacity:0;transform:translateY(14px);transition:opacity .7s var(--ease-out),transform .7s var(--ease-out)}

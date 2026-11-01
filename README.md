@@ -130,6 +130,7 @@ npm start          # 或 npm run dev（文件监听）
 - 本地默认存储在 `data/db.json`（文件驱动，写入走临时文件 + rename 原子替换）。
 - 顶栏「导出」可下载整份 JSON（`/api/export`）；「导入」接受同样的 JSON（`/api/import`，支持 replace / merge）。
 - `data/` 已在 `.gitignore` 里，不会被提交。
+- **从旧版升级**：旧版浮动便签现在看不见了，跑一次 `npm run migrate:notes` 会把它们摊成一块叫「旧便签」的灵感板（`--check` 只看不动，幂等）。便签原始数据保留在 `notes` 集合里，导出 JSON 时仍然完整。迁移会直接改 `data/db.json`，**先停掉正在跑的服务再执行**，否则运行中的进程会用内存里的旧数据把它覆盖掉。
 
 ## 目录结构
 

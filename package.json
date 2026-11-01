@@ -13,6 +13,7 @@
     "predev": "node scripts/check-port.js",
     "dev": "node --watch server/server.js",
     "seed": "node scripts/seed.js",
+    "migrate:notes": "node scripts/migrate-notes.js",
     "test": "node --test test/*.test.js"
   }
 }

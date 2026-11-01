@@ -67,23 +67,35 @@ if (!resetOnly && store.count('items') === 0 && store.count('categories') === 0)
   seedItem('it_scp_173', c1._id, 'SCP-173', '雕像',
     'https://scp-wiki-cn.wikidot.com/scp-173', '第一条被写下的项目，值得反复重读。', now - 1000);
 
-  store.insert('notes', {
-    _id: 'nt_welcome', title: '欢迎 · 在这里记录灵感',
-    body: '直接点击这段文字就可以编辑。\n\n拖动上方的标题栏可以把这张便签移到任意位置。\n\n所有修改都会自动写入服务器，换设备打开也是同一份内容。',
-    x: 46, y: 44, w: 326, z: 3, accent: 'amber', createdAt: now, updatedAt: now,
-  });
-  store.insert('notes', {
-    _id: 'nt_clue', title: '待展开的线索',
-    body: '· 一个从不重复的收容编号\n· 一段被删除的访谈记录\n· 档案员自己的名字',
-    x: 412, y: 108, w: 288, z: 2, accent: 'bone', createdAt: now - 60000, updatedAt: now - 60000,
-  });
+  // 示例灵感板：便签是画板里的一种节点，保存后压缩成一张卡出现在灵感页
+  if (store.count('boards') === 0) {
+    const note = (id, text, x, y, w, h, z, color) => ({
+      id, type: 'note', text, x, y, w, h, z, size: 13, color,
+    });
+    store.insert('boards', {
+      _id: 'bd_welcome',
+      kind: 'idea',
+      title: '欢迎 · 在这里记录灵感',
+      note: '双击可以重新展开这块板。板上的便签、连线都会跟着一起存下来。',
+      cats: ['cat_classic'],
+      x: 60, y: 60, w: 320, h: 200, color: '#8d9188',
+      nodes: [
+        note('nd_w1', '直接点文字就能改。\n\n拖动便签换位置，从工具栏「连接」可以把两张便签连起来。', 40, 40, 260, 150, 2, '#e6e3dc'),
+        note('nd_w2', '· 一个从不重复的收容编号\n· 一段被删除的访谈记录\n· 档案员自己的名字', 340, 96, 240, 150, 1, '#e6e3dc'),
+      ],
+      edges: [
+        { id: 'eg_w1', from: 'nd_w1', to: 'nd_w2', color: '#d8443a', note: '待展开的线索' },
+      ],
+      createdAt: now, updatedAt: now,
+    });
+  }
 
   if (!store.get('settings', 'site')) {
     store.insert('settings', {
       _id: 'site', other: { remark: '' }, contentVersion: 1, schemaVersion: 2, updatedAt: now,
     });
   }
-  console.log('已写入示例分类 / 条目 / 便签（可登录后删除）。');
+  console.log('已写入示例分类 / 条目 / 灵感板（可登录后删除）。');
 }
 
 await store.close();

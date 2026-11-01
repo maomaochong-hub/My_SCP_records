@@ -86,6 +86,9 @@ test('匿名访问所有写接口一律 401', async () => {
     ['PATCH', '/api/settings', { other: { remark: 'x' } }],
     ['POST', '/api/works', { title: 'x' }],
     ['GET', '/api/works'],
+    ['POST', '/api/boards', { kind: 'links' }],
+    ['PATCH', '/api/boards/b1', { title: 'x' }],
+    ['DELETE', '/api/boards/b1'],
     ['GET', '/api/stats/overview'],
     ['GET', '/api/stats/months'],
     ['POST', '/api/stats/archive', {}],
@@ -162,6 +165,93 @@ test('/api/content 支持 ETag 304', async () => {
   assert.ok(etag);
   const second = await fetch(ORIGIN + '/api/content', { headers: { 'If-None-Match': etag } });
   assert.equal(second.status, 304);
+});
+
+test('副本条目按复制顺序标出「第几次修改」', async () => {
+  const base = await api('/api/items', { method: 'POST', auth: true, body: { title: '原件', url: 'https://example.com/a' } });
+  const root = (await base.json()).data;
+  const rootId = root._id || root.id;
+
+  const revs = [];
+  for (let i = 0; i < 2; i++) {
+    const res = await api('/api/items', {
+      method: 'POST',
+      auth: true,
+      body: { title: '副本' + (i + 1), snapshotOf: rootId, revisionSentinel: true },
+    });
+    assert.equal(res.status, 201);
+    revs.push((await res.json()).data.revision);
+  }
+  assert.deepEqual(revs, [1, 2], '两份副本应依次是第 1、2 次修改');
+
+  const content = await api('/api/content');
+  const items = (await content.json()).data.items;
+  const copies = items.filter((i) => i.snapshotOf === rootId);
+  assert.equal(copies.length, 2);
+  assert.deepEqual(copies.map((c) => c.revision).sort(), [1, 2]);
+  assert.equal(items.find((i) => i.id === rootId).revision, 0, '原件本身不带修改序号');
+});
+
+/* ---------------- 画板 ---------------- */
+
+test('画板写入前清洗：非法图片路径、自环与悬空连线都会被丢掉', async () => {
+  const created = await api('/api/boards', {
+    method: 'POST',
+    auth: true,
+    body: {
+      kind: 'idea',
+      title: '测试画板',
+      nodes: [
+        { id: 'ndA', type: 'ref', refId: 'i1', code: 'SCP-000', title: '甲' },
+        { id: 'ndB', type: 'image', image: '/media/../../etc/passwd.png', caption: '穿透尝试' },
+        { id: 'ndC', type: 'image', image: '/media/abcdef12.png' },
+        { id: 'ndD', type: 'shape', shape: 'не-существует', x: 999999 },
+      ],
+      edges: [
+        { from: 'ndA', to: 'ndA' },
+        { from: 'ndA', to: 'ndB' },
+        { from: 'ndA', to: '不存在的节点' },
+      ],
+    },
+  });
+  assert.equal(created.status, 201);
+  const board = (await created.json()).data;
+
+  assert.equal(board.kind, 'idea');
+  assert.equal(board.nodes.length, 4, '四个节点都应保留');
+  assert.equal(board.edges.length, 1, '自环与指向不存在节点的线必须被丢弃');
+
+  const byId = Object.fromEntries(board.nodes.map((n) => [n.id, n]));
+  assert.equal(byId.ndB.image, '', '路径穿越的图片地址应被清空');
+  assert.equal(byId.ndC.image, '/media/abcdef12.png', '合法地址应保留');
+  assert.equal(byId.ndD.shape, 'rect', '未知形状回落为矩形');
+  assert.ok(byId.ndD.x <= 16000, '坐标应被夹到上限内');
+
+  // 读是公开的
+  const anon = await fetch(`${ORIGIN}/api/boards/${board.id}`);
+  assert.equal(anon.status, 200);
+  const pub = (await anon.json()).data;
+  assert.equal(pub.id, board.id);
+  assert.ok(!('_id' in pub), '对外不应暴露 _id');
+});
+
+test('画板可改名、可删，改名不许为空', async () => {
+  const created = await api('/api/boards', {
+    method: 'POST', auth: true, body: { kind: 'board', title: '待改名' },
+  });
+  const board = (await created.json()).data;
+
+  const bad = await api(`/api/boards/${board.id}`, { method: 'PATCH', auth: true, body: { title: '' } });
+  assert.equal(bad.status, 400, '空名称应被拒绝');
+
+  const ok = await api(`/api/boards/${board.id}`, { method: 'PATCH', auth: true, body: { title: '改过的名字' } });
+  assert.equal((await ok.json()).data.title, '改过的名字');
+
+  const del = await api(`/api/boards/${board.id}`, { method: 'DELETE', auth: true });
+  assert.equal(del.status, 200);
+
+  const gone = await fetch(`${ORIGIN}/api/boards/${board.id}`);
+  assert.equal(gone.status, 404);
 });
 
 /* ---------------- 作品 ---------------- */

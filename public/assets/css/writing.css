@@ -99,3 +99,54 @@ body:not(.is-owner) .note__title,body:not(.is-owner) .note__body{cursor:default}
   .note{position:static!important;width:100%!important;animation:none}
   .note__body{max-height:220px}
 }
+
+/* =========================================================
+   压缩条目面
+   ========================================================= */
+.wbar{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;
+}
+.wbar .search{flex:1 1 260px;min-width:200px}
+.wbar .modes{flex:0 0 auto}
+.wbar .btn{padding:8px 14px;font-size:9.5px}
+
+.wgrid{
+  display:grid;grid-template-columns:204px minmax(0,1fr);
+  gap:clamp(16px,2.6vw,34px);align-items:start;
+  margin-bottom:clamp(24px,4vh,44px);
+}
+.wside{position:sticky;top:74px;min-width:0}
+.wside__tip{
+  font-family:var(--mono);font-size:8.5px;letter-spacing:.12em;line-height:1.9;
+  color:var(--ink-4);padding:2px 0 6px;
+}
+
+.wsurface{min-width:0}
+.wsurface__bar{
+  display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px;
+  font-family:var(--mono);font-size:9px;letter-spacing:.14em;color:var(--ink-4);
+  min-height:22px;
+}
+.wsurface__hint{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wsurface__link{
+  flex:0 0 auto;padding:4px 10px;border:1px solid var(--line);
+  font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;color:var(--ink-4);
+  transition:.24s var(--ease);
+}
+.wsurface__link:hover{color:var(--ink);border-color:var(--line-3)}
+.wsurface__link.is-on{border-color:rgba(176,42,32,.55);color:#e8a29b;background:rgba(176,42,32,.12)}
+
+/* .bd 也会给这个盒子加 height:100%，这里用双类选择器把固定高度抢回来 */
+.wsurface .wsurface__box{
+  position:relative;height:clamp(440px,58vh,700px);
+  border:1px solid var(--line);background-color:#090b0e;
+  box-shadow:inset 0 0 90px 10px rgba(0,0,0,.5);
+  overflow:hidden;
+}
+.wsurface__box .empty{border:0;height:100%;justify-content:center}
+
+@media (max-width:980px){
+  .wgrid{grid-template-columns:1fr}
+  .wside{position:static}
+}
+

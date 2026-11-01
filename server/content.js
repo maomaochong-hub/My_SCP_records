@@ -1,6 +1,7 @@
 import { fail, httpUrl, num, str } from './util.js';
 import { newId } from './util.js';
 import { removeImageIfUnused } from './uploads.js';
+import { normBoardOut } from './boards.js';
 
 const MAX = {
   catName: 24,
@@ -126,9 +127,13 @@ export function snapshot(store) {
         displayCatId: displayOf(it, ids),
         image: normImage(it.image),
         snapshotOf: it.snapshotOf || null,
+        revision: num(it.revision, { def: 0 }) || 0,
       };
     }),
     notes: notes.map(strip),
+    boards: store.all('boards').slice()
+      .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
+      .map(normBoardOut),
     other: s.other || { remark: '' },
     updatedAt: s.updatedAt || Date.now(),
   };
@@ -203,6 +208,11 @@ export function createItem(store, body) {
   const title = str(body.title, { max: MAX.itemTitle, min: 1 });
   if (!title) fail(400, 'E_VALIDATION', '名称不能为空', { field: 'title' });
   const catIds = normIds(store, body.catIds != null ? body.catIds : body.catId, null);
+  const snapshotOf = str(body.snapshotOf, { max: 40 }) || null;
+  // 同一条目链路上已有几份副本 → 这一份是第几次修改
+  const revision = snapshotOf
+    ? store.all('items').filter((x) => x.snapshotOf === snapshotOf).length + 1
+    : 0;
   const now = Date.now();
   const doc = store.insert('items', {
     _id: newId('it'),
@@ -214,7 +224,8 @@ export function createItem(store, body) {
     url: httpUrl(body.url),
     note: str(body.note, { max: MAX.itemNote }),
     image: normImage(body.image),
-    snapshotOf: str(body.snapshotOf, { max: 40 }) || null,
+    snapshotOf,
+    revision,
     createdAt: now,
     updatedAt: now,
   });
@@ -341,12 +352,13 @@ export function importAll(store, body) {
   }
   const mode = body.mode === 'merge' ? 'merge' : 'replace';
   const now = Date.now();
-  const counts = { categories: 0, items: 0, notes: 0 };
+  const counts = { categories: 0, items: 0, notes: 0, boards: 0 };
 
   if (mode === 'replace') {
     store.removeWhere('categories', (c) => !c.locked);
     store.removeWhere('items', () => true);
     store.removeWhere('notes', () => true);
+    store.removeWhere('boards', () => true);
   }
   ensureArchiveCategory(store);
 
@@ -411,6 +423,31 @@ export function importAll(store, body) {
     store.update('settings', 'site', {
       other: { remark: str(data.other.remark, { max: MAX.remark, trim: false }) || '' },
     });
+  }
+
+  for (const b of Array.isArray(data.boards) ? data.boards : []) {
+    const cats = [];
+    for (const raw of Array.isArray(b.cats) ? b.cats : []) {
+      const mapped = catMap.get(String(raw)) || (store.get('categories', String(raw)) ? String(raw) : null);
+      if (mapped && !cats.includes(mapped)) cats.push(mapped);
+    }
+    store.insert('boards', {
+      _id: newId('bd'),
+      kind: ['links', 'idea', 'board'].includes(b.kind) ? b.kind : 'links',
+      title: str(b.title, { max: 80 }) || '未命名连接',
+      note: str(b.note, { max: 400 }) || '',
+      cats,
+      x: num(b.x, { def: 40 }),
+      y: num(b.y, { def: 40 }),
+      w: num(b.w, { min: 180, max: 900, def: 300 }),
+      h: num(b.h, { min: 80, max: 900, def: 180 }),
+      color: /^#[0-9a-f]{3,8}$/i.test(String(b.color || '')) ? b.color : '#8d9188',
+      nodes: Array.isArray(b.nodes) ? b.nodes.slice(0, 400) : [],
+      edges: Array.isArray(b.edges) ? b.edges.slice(0, 600) : [],
+      createdAt: num(b.createdAt, { def: now }),
+      updatedAt: now,
+    });
+    counts.boards++;
   }
 
   bump(store);

@@ -27,6 +27,7 @@ export const store = {
   get categories() { return this.data.categories; },
   get items() { return this.data.items; },
   get notes() { return this.data.notes; },
+  get boards() { return this.data.boards || []; },
   get other() { return this.data.other || { remark: '' }; },
 
   categoryName(id) {

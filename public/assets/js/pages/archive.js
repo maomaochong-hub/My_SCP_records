@@ -5,11 +5,13 @@ import { api } from '../core/api.js';
 import { store } from '../core/store.js';
 import { openItemEditor, openCategoryPicker, ARCHIVE_ID } from '../ui/item-editor.js';
 import { pheadHTML } from '../ui/page-head.js';
+import { openBoardWorkspace } from '../ui/board-workspace.js';
 
 const ARCHIVE_NAME = 'SCP-6183-A';
 const WIKI_HOME = 'https://scp-wiki-cn.wikidot.com/';
+const ARCHIVE_URL = 'https://scp-wiki-cn.wikidot.com/scp-6183';
 
-/** cat: 当前分类 / q: 检索词 / mode: include 只看匹配，exclude 只看不匹配 */
+/** cat: 当前分类 / q: 检索词 / mode: include 只看匹配，exclude 只看不匹配，category 只检索分类名 */
 const filter = { cat: 'all', q: '', mode: 'include' };
 
 const catsOf = (it) => {
@@ -22,6 +24,15 @@ const isArchiveOnly = (it) => {
   const cs = catsOf(it);
   return cs.length === 1 && cs[0] === ARCHIVE_ID;
 };
+const linksOf = () => store.boards.filter((b) => b.kind === 'links');
+
+/* ---------------- 撤回 ---------------- */
+
+const undoStack = [];
+function pushUndo(label, fn) {
+  undoStack.push({ label, fn });
+  if (undoStack.length > 24) undoStack.shift();
+}
 
 /* ---------------- 检索 ---------------- */
 
@@ -39,14 +50,15 @@ function parseQuery(raw) {
   return out;
 }
 
+const catNames = (it) => catsOf(it).map((id) => (catObj(id) || {}).name || '').join(' ');
+
 function haystack(it) {
-  const names = catsOf(it).map((id) => (catObj(id) || {}).name || '').join(' ');
-  return `${it.code || ''} ${it.title || ''} ${it.note || ''} ${names}`.toLowerCase();
+  return `${it.code || ''} ${it.title || ''} ${it.note || ''} ${catNames(it)}`.toLowerCase();
 }
 
 function matches(it, terms) {
   if (!terms.length) return true;
-  const hay = haystack(it);
+  const hay = filter.mode === 'category' ? catNames(it).toLowerCase() : haystack(it);
   for (const t of terms) {
     const has = hay.includes(t.term);
     if (t.neg ? has : !has) return false;
@@ -86,23 +98,41 @@ function filteredItems() {
     .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 
-function cardHTML(it, i, terms) {
+function taxHTML(it) {
   const cs = catsOf(it);
   const displayId = it.displayCatId && cs.includes(it.displayCatId) ? it.displayCatId : cs[0];
-  const cat = displayId ? catObj(displayId) : null;
-  const extra = cs.length > 1 ? `<span class="dcard__more">+${cs.length - 1}</span>` : '';
+  const main = (displayId && catObj(displayId)) || null;
+
+  if (!cs.length) return '<span class="dcard__tag is-none">未分类</span>';
+
+  const list = cs.map((id) => {
+    const c = catObj(id);
+    return `<button type="button" class="dcard__cat${id === displayId ? ' is-cur' : ''}"
+      data-tax-cat="${esc(id)}" title="跳到「${esc(c ? c.name : '')}」">${esc(c ? c.name : '已删除分类')}</button>`;
+  }).join('');
+
+  return `
+    <span class="dcard__tag" data-tax-hover tabindex="0">
+      <span>${esc(main ? main.name : '未分类')}</span>
+      ${cs.length > 1 ? '<i class="dcard__caret" aria-hidden="true"></i>' : ''}
+    </span>
+    <span class="dcard__taxlist" role="menu">${list}</span>`;
+}
+
+function cardHTML(it, i, terms) {
   const host = it.url ? hostOf(it.url) : '';
   const delay = Math.min(i * 32, 280);
+  const rev = it.snapshotOf && it.revision ? `<div class="dcard__rev">— 第 ${it.revision} 次修改 —</div>` : '';
 
   return `
     <article class="dcard${it.snapshotOf ? ' is-copy' : ''}" data-id="${it.id}" style="animation-delay:${delay}ms">
       <div class="dcard__top">
         <span class="dcard__code">${hl(it.code || '—', terms)}</span>
-        <span class="dcard__tax">
-          <span class="dcard__tag">${esc(cat ? cat.name : '未分类')}${extra}</span>
+        <span class="dcard__tax">${taxHTML(it)}
           <button class="dcard__taxedit" type="button" data-item-tax="${it.id}" data-owner-only>编辑分类</button>
         </span>
       </div>
+      ${rev}
       <div class="dcard__mid">
         <div class="dcard__text">
           <h3 class="dcard__title">${hl(it.title, terms)}</h3>
@@ -121,6 +151,24 @@ function cardHTML(it, i, terms) {
           <button type="button" class="danger" data-item-del="${it.id}">删除</button>
         </span>
       </div>
+    </article>`;
+}
+
+function boardCardHTML(b, i) {
+  const n = (b.nodes || []).length;
+  const e = (b.edges || []).length;
+  return `
+    <article class="lcard" data-board="${esc(b.id)}" data-board-open="${esc(b.id)}" style="animation-delay:${Math.min(i * 30, 200)}ms">
+      <div class="lcard__top">
+        <span class="lcard__k">CONNECTIONS</span>
+        <span class="lcard__m">${n} 条目 · ${e} 连线</span>
+      </div>
+      <h3 class="lcard__t">${esc(b.title)}</h3>
+      <p class="lcard__n">${b.note ? esc(b.note) : '<span class="dcard__none">—</span>'}</p>
+      <span class="lcard__acts">
+        <button type="button" data-board-open="${esc(b.id)}">打开</button>
+        <button type="button" class="danger" data-board-del="${esc(b.id)}" data-owner-only>删除</button>
+      </span>
     </article>`;
 }
 
@@ -166,17 +214,17 @@ function sideHTML(isOwner) {
 }
 
 function toolbarHTML(isOwner) {
+  const mode = (k, label) => `<button type="button" class="mode${filter.mode === k ? ' is-on' : ''}" data-mode="${k}">${label}</button>`;
   return `
     <div class="toolbar">
       <div class="searchwrap">
         <label class="search">
           <span class="search__ico">⌕</span>
-          <input id="q" type="search" placeholder="检索 编号 / 名称 / 备注 / 分类" autocomplete="off" value="${esc(filter.q)}">
+          <input id="q" type="search" placeholder="${filter.mode === 'category' ? '检索 分类名称' : '检索 编号 / 名称 / 备注 / 分类'}" autocomplete="off" value="${esc(filter.q)}">
         </label>
         <div class="search__row">
           <div class="modes" role="group" aria-label="检索方式">
-            <button type="button" class="mode${filter.mode === 'include' ? ' is-on' : ''}" data-mode="include">筛选</button>
-            <button type="button" class="mode${filter.mode === 'exclude' ? ' is-on' : ''}" data-mode="exclude">排除</button>
+            ${mode('include', '筛选')}${mode('exclude', '排除')}${mode('category', '分类')}
           </div>
           <span class="search__hint">空格 = 同时满足 · <b>-词</b> = 排除 · <b>"短语"</b> = 精确</span>
         </div>
@@ -191,6 +239,30 @@ function randomBtnHTML() {
   </button>`;
 }
 
+function linksHTML(isOwner) {
+  const list = linksOf();
+  return `
+    <section class="links" id="links">
+      <div class="links__h">
+        <span>连接板 / Connections</span>
+        <span>${list.length}</span>
+      </div>
+      ${list.length
+        ? `<div class="links__grid">${list.map((b, i) => boardCardHTML(b, i)).join('')}</div>`
+        : `<p class="links__none">还没有连接板。把几条记录摆在一块板上，用线标出它们之间的关系。</p>`}
+      ${isOwner ? '<button type="button" class="links__new" data-board-new>＋ 新建连接</button>' : ''}
+    </section>`;
+}
+
+/* ---------------- 归档彩蛋 ---------------- */
+
+const REDACT_AT = 42 * 1000;
+const DOOM_AT = 420 * 1000;
+
+let redactTimer = null;
+let doomTimer = null;
+let lastActivity = 0;
+
 /* ---------------- 挂载 ---------------- */
 export async function mount({ isOwner }) {
   const app = $('#app');
@@ -204,10 +276,10 @@ export async function mount({ isOwner }) {
           <div class="cards" id="cards"></div>
         </div>
       </div>
+      ${linksHTML(isOwner)}
     </section>`;
 
-  const terms = () => parseQuery(filter.q);
-
+  let linksSig = '';
   paint();
   observeReveal(app);
 
@@ -220,6 +292,62 @@ export async function mount({ isOwner }) {
       const art = img.closest('.dcard__art');
       if (art) art.remove();
     }, true);
+  }
+
+  /* ---------- 归档彩蛋 ---------- */
+  function archiveNameEl() {
+    return $(`.cat[data-cat="${ARCHIVE_ID}"] .cat__name`);
+  }
+
+  function setPurged(on) {
+    const el = archiveNameEl();
+    if (!el) return;
+    el.textContent = on ? '[已删除]' : ARCHIVE_NAME;
+    const row = el.closest('.cat');
+    if (row) row.classList.toggle('is-purged', on);
+  }
+
+  function disarm() {
+    clearTimeout(redactTimer);
+    clearTimeout(doomTimer);
+    redactTimer = null;
+    doomTimer = null;
+  }
+
+  function arm() {
+    disarm();
+    if (filter.cat !== ARCHIVE_ID) {
+      setPurged(false);
+      return;
+    }
+    redactTimer = setTimeout(() => setPurged(true), REDACT_AT);
+    doomTimer = setTimeout(() => {
+      location.href = ARCHIVE_URL;
+    }, DOOM_AT);
+  }
+
+  function onActivity() {
+    const now = Date.now();
+    if (now - lastActivity < 800) return;
+    lastActivity = now;
+    setPurged(false);
+    arm();
+  }
+
+  if (filter.cat === ARCHIVE_ID) arm();
+  ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart'].forEach((ev) => {
+    document.addEventListener(ev, onActivity, { passive: true });
+  });
+
+  function paintLinks(force) {
+    const sig = linksOf().map((b) => `${b.id}:${b.updatedAt || 0}:${(b.nodes || []).length}:${(b.edges || []).length}`).join('|');
+    if (!force && sig === linksSig) return;
+    linksSig = sig;
+    const cur = $('#links');
+    if (!cur) return;
+    const box = document.createElement('div');
+    box.innerHTML = linksHTML(isOwner);
+    cur.replaceWith(box.firstElementChild);
   }
 
   function paint() {
@@ -239,17 +367,22 @@ export async function mount({ isOwner }) {
           ? '这个部门曾经的图片已被移除。留下的噪点仍在自行复制，偶尔会浮出旧条目的影子。'
           : none
             ? (isOwner ? '点击右上「新建项目」收录第一个条目，先建分类也可以。' : '所有者还没有收录任何条目。')
-            : (filter.mode === 'exclude' ? '排除模式下把这些都滤掉了，换个词试试。' : '换个关键词，或切回「全部」分类。'),
+            : (filter.mode === 'exclude' ? '排除模式下把这些都滤掉了，换个词试试。'
+              : filter.mode === 'category' ? '没有分类名包含这个词。' : '换个关键词，或切回「全部」分类。'),
         action: none && isOwner ? '<button type="button" class="btn btn--primary" data-item-new>＋ 新建项目</button>' : '',
       });
-      return;
+    } else {
+      wrap.innerHTML = list.map((it, i) => cardHTML(it, i, t)).join('');
     }
-    wrap.innerHTML = list.map((it, i) => cardHTML(it, i, t)).join('');
+
+    if ($('#links')) paintLinks(!linksSig);
+    arm();
   }
 
   function paintSide() {
     const side = $('.side', app);
     if (side) side.outerHTML = sideHTML(isOwner);
+    arm();
   }
 
   function refreshMeta() {
@@ -267,8 +400,28 @@ export async function mount({ isOwner }) {
     refreshMeta();
   }
 
+  /* ---------- 撤回 ---------- */
+  document.addEventListener('keydown', async (e) => {
+    if (!(e.ctrlKey || e.metaKey) || String(e.key).toLowerCase() !== 'z') return;
+    const t = e.target;
+    if (t && typeof t.closest === 'function' && t.closest('input, textarea, [contenteditable="true"]')) return;
+    const last = undoStack.pop();
+    if (!last) return;
+    e.preventDefault();
+    try {
+      await last.fn();
+      await reload();
+      toast(`已撤回：${last.label}`);
+    } catch (err) {
+      toast(err.message || '撤回失败');
+      undoStack.push(last);
+    }
+  });
+
   /* ---------- 点击 ---------- */
   app.addEventListener('click', async (e) => {
+    const taxHover = e.target.closest('[data-tax-hover]');
+    const taxCat = e.target.closest('[data-tax-cat]');
     const catEl = e.target.closest('[data-cat]');
     const catDel = e.target.closest('[data-cat-del]');
     const itemNew = e.target.closest('[data-item-new]');
@@ -276,6 +429,24 @@ export async function mount({ isOwner }) {
     const itemTax = e.target.closest('[data-item-tax]');
     const itemDel = e.target.closest('[data-item-del]');
     const modeBtn = e.target.closest('[data-mode]');
+    const boardNew = e.target.closest('[data-board-new]');
+    const boardOpen = e.target.closest('[data-board-open]');
+    const boardDel = e.target.closest('[data-board-del]');
+
+    if (taxHover) {
+      // 触屏没有 hover，点一下展开
+      const wrap = taxHover.closest('.dcard__tax');
+      const open = wrap.classList.contains('is-open');
+      $$('.dcard__tax.is-open').forEach((x) => x.classList.remove('is-open'));
+      if (!open) wrap.classList.add('is-open');
+      return;
+    }
+
+    if (taxCat) {
+      e.preventDefault();
+      setCat(taxCat.dataset.taxCat);
+      return;
+    }
 
     if (catDel) {
       e.stopPropagation();
@@ -295,15 +466,15 @@ export async function mount({ isOwner }) {
     }
 
     if (catEl) {
-      filter.cat = catEl.dataset.cat;
-      $$('.cat', app).forEach((n) => n.classList.toggle('is-on', n.dataset.cat === filter.cat));
-      paint();
+      setCat(catEl.dataset.cat);
       return;
     }
 
     if (modeBtn) {
-      filter.mode = modeBtn.dataset.mode === 'exclude' ? 'exclude' : 'include';
+      filter.mode = ['exclude', 'category'].includes(modeBtn.dataset.mode) ? modeBtn.dataset.mode : 'include';
       $$('.mode', app).forEach((b) => b.classList.toggle('is-on', b.dataset.mode === filter.mode));
+      const q = $('#q');
+      if (q) q.placeholder = filter.mode === 'category' ? '检索 分类名称' : '检索 编号 / 名称 / 备注 / 分类';
       paint();
       return;
     }
@@ -325,13 +496,20 @@ export async function mount({ isOwner }) {
       if (!isOwner) return;
       const item = store.items.find((x) => x.id === itemTax.dataset.itemTax);
       if (!item) return;
+      const before = { catIds: catsOf(item), displayCatId: item.displayCatId || null };
       openCategoryPicker({
         categories: store.categories,
-        catIds: catsOf(item),
-        displayCatId: item.displayCatId || null,
+        catIds: before.catIds,
+        displayCatId: before.displayCatId,
         onDone: async ({ catIds, displayCatId }) => {
           try {
             await api.patch(`/api/items/${item.id}`, { catIds, displayCatId });
+            pushUndo('改动分类', async () => {
+              await api.patch(`/api/items/${item.id}`, {
+                catIds: before.catIds,
+                displayCatId: before.displayCatId,
+              });
+            });
             await reload();
             toast('分类已更新');
           } catch (err) { toast(err.message || '更新失败'); }
@@ -352,12 +530,60 @@ export async function mount({ isOwner }) {
       if (!isOwner) return;
       const item = store.items.find((x) => x.id === itemDel.dataset.itemDel);
       if (!item) return;
-      if (!confirm(`删除记录「${item.title}」？此操作不可撤销。`)) return;
+      if (!confirm(`删除记录「${item.title}」？删除后可用 Ctrl+Z 撤回。`)) return;
       try {
         await api.del(`/api/items/${item.id}`);
+        pushUndo(`删除「${item.title}」`, async () => {
+          await api.post('/api/items', {
+            code: item.code || '—',
+            title: item.title,
+            url: item.url || '',
+            note: item.note || '',
+            image: item.image || '',
+            catIds: catsOf(item),
+            displayCatId: item.displayCatId || null,
+          });
+        });
         await reload();
-        toast('记录已删除');
+        toast('记录已删除 · Ctrl+Z 可撤回');
       } catch (err) { toast(err.message || '删除失败'); }
+      return;
+    }
+
+    if (boardNew) {
+      if (!isOwner) return;
+      openBoardWorkspace({
+        mode: 'links',
+        boards: store.boards,
+        items: store.items.filter((i) => !isArchiveOnly(i)),
+        onSaved: reload,
+      });
+      return;
+    }
+
+    if (boardDel) {
+      if (!isOwner) return;
+      const b = store.boards.find((x) => x.id === boardDel.dataset.boardDel);
+      if (!b) return;
+      if (!confirm(`删除连接板「${b.title}」？`)) return;
+      try {
+        await api.del(`/api/boards/${b.id}`);
+        await reload();
+        toast('连接板已删除');
+      } catch (err) { toast(err.message || '删除失败'); }
+      return;
+    }
+
+    if (boardOpen) {
+      const b = store.boards.find((x) => x.id === boardOpen.dataset.boardOpen);
+      if (!b) return;
+      openBoardWorkspace({
+        mode: 'links',
+        board: b,
+        boards: store.boards,
+        items: store.items.filter((i) => !isArchiveOnly(i)),
+        onSaved: reload,
+      });
       return;
     }
 
@@ -372,6 +598,12 @@ export async function mount({ isOwner }) {
       location.href = pick.url;
     }
   });
+
+  function setCat(id) {
+    filter.cat = id || 'all';
+    $$('.cat', app).forEach((n) => n.classList.toggle('is-on', n.dataset.cat === filter.cat));
+    paint();
+  }
 
   /* ---------- 分类新建 ---------- */
   app.addEventListener('click', (e) => {

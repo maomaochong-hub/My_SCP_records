@@ -10,6 +10,7 @@ import {
   rollback, saveDraft, saveVersion, updateWork, workSource,
 } from './works.js';
 import { archiveNow, dailySeries, monthSeries, overview, track } from './stats.js';
+import { createBoard, deleteBoard, getBoard, listBoards, updateBoard } from './boards.js';
 import { saveImageDataUrl } from './uploads.js';
 import { clientIp, dayKey } from './util.js';
 
@@ -121,6 +122,15 @@ route('POST', '/api/notes', (ctx) => ({ status: 201, body: createNote(ctx.store,
 route('PATCH', '/api/notes/:id/geometry', (ctx) => ({ status: 200, body: updateNoteGeometry(ctx.store, ctx.params.id, ctx.body) }), 'owner');
 route('PATCH', '/api/notes/:id', (ctx) => ({ status: 200, body: updateNote(ctx.store, ctx.params.id, ctx.body) }), 'owner');
 route('DELETE', '/api/notes/:id', (ctx) => ({ status: 200, body: deleteNote(ctx.store, ctx.params.id) }), 'owner');
+
+/* ---------------- 画板 / 连接板 ---------------- */
+route('GET', '/api/boards', (ctx) => ({
+  status: 200, body: listBoards(ctx.store, { kind: ctx.query.kind ? String(ctx.query.kind) : undefined }),
+}), 'public');
+route('GET', '/api/boards/:id', (ctx) => ({ status: 200, body: getBoard(ctx.store, ctx.params.id) }), 'public');
+route('POST', '/api/boards', (ctx) => ({ status: 201, body: createBoard(ctx.store, ctx.body) }), 'owner');
+route('PATCH', '/api/boards/:id', (ctx) => ({ status: 200, body: updateBoard(ctx.store, ctx.params.id, ctx.body) }), 'owner');
+route('DELETE', '/api/boards/:id', (ctx) => ({ status: 200, body: deleteBoard(ctx.store, ctx.params.id) }), 'owner');
 
 route('PATCH', '/api/settings', (ctx) => ({ status: 200, body: updateSettings(ctx.store, ctx.body) }), 'owner');
 

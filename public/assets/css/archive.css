@@ -297,3 +297,111 @@ body:not(.is-owner) .dcard__acts{display:none!important}
 @media (prefers-reduced-motion:reduce){
   .cards.is-redacted::after{animation:none}
 }
+
+/* =========================================================
+   分类：悬停展开全部归属
+   ========================================================= */
+.dcard:hover{z-index:5}
+.dcard__tax{position:relative;max-width:62%}
+.dcard__tag{cursor:default}
+.dcard__tag.is-none{color:var(--ink-4);border-style:dashed}
+.dcard__caret{
+  width:0;height:0;flex:0 0 auto;
+  border-left:3px solid transparent;border-right:3px solid transparent;
+  border-bottom:3.5px solid currentColor;opacity:.5;
+}
+.dcard__tax:hover .dcard__tag,
+.dcard__tax:focus-within .dcard__tag,
+.dcard__tax.is-open .dcard__tag{
+  color:var(--ink-2);border-color:var(--line-2);background:#0b0e12;
+}
+.dcard__taxlist{
+  display:none;position:absolute;top:-1px;right:0;z-index:7;
+  min-width:118px;max-width:min(230px,62vw);
+  flex-direction:column;padding:3px;
+  background:#0b0e12;border:1px solid var(--line-2);
+  box-shadow:0 26px 44px -30px #000;
+}
+.dcard__tax:hover .dcard__taxlist,
+.dcard__tax:focus-within .dcard__taxlist,
+.dcard__tax.is-open .dcard__taxlist{display:flex}
+.dcard__tax:hover .dcard__taxedit,
+.dcard__tax:focus-within .dcard__taxedit,
+.dcard__tax.is-open .dcard__taxedit{opacity:0;pointer-events:none}
+.dcard__cat{
+  text-align:left;padding:5px 8px;max-width:100%;
+  font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--ink-3);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  transition:background .2s,color .2s;
+}
+.dcard__cat:hover{background:rgba(216,218,211,.08);color:var(--ink)}
+.dcard__cat.is-cur{color:var(--red-2)}
+
+/* 归档副本：第几次修改 */
+.dcard__rev{
+  margin:-2px 0 -1px;text-align:center;
+  font-family:var(--mono);font-size:8.5px;letter-spacing:.22em;
+  color:rgba(216,68,58,.78);
+}
+.dcard.is-copy .dcard__rev::before{content:"◂ ";opacity:.6}
+.dcard.is-copy .dcard__rev::after{content:" ▸";opacity:.6}
+
+/* 归档分类名称被"清除"后的样子 */
+.cat.is-purged .cat__name{color:var(--red-2);letter-spacing:.2em}
+.cat.is-purged .cat__n{color:rgba(216,68,58,.6)}
+
+/* =========================================================
+   连接板
+   ========================================================= */
+.links{margin-top:clamp(36px,5vw,64px);padding-top:22px;border-top:1px solid var(--line)}
+.links__h{
+  display:flex;justify-content:space-between;align-items:center;gap:10px;
+  padding-bottom:10px;border-bottom:1px solid var(--line);
+  font-family:var(--mono);font-size:9px;letter-spacing:.26em;color:var(--ink-4);text-transform:uppercase;
+}
+.links__grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:14px;margin-top:14px}
+.links__none{
+  margin-top:14px;padding:20px;border:1px dashed var(--line);
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;color:var(--ink-4);line-height:1.9;
+}
+.links__new{
+  display:inline-flex;align-items:center;gap:8px;margin-top:14px;
+  padding:9px 16px;border:1px dashed var(--line-2);
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.2em;color:var(--ink-3);
+  text-transform:uppercase;transition:.28s var(--ease);
+}
+.links__new:hover{color:var(--bg);background:var(--ink);border-color:var(--ink);border-style:solid}
+
+.lcard{
+  position:relative;display:flex;flex-direction:column;gap:8px;
+  padding:13px 15px 12px;border:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(216,218,211,.03),rgba(216,218,211,.008));
+  transition:.4s var(--ease);cursor:pointer;
+  animation:cardIn .5s var(--ease) both;
+}
+.lcard::before{
+  content:"";position:absolute;left:0;top:0;width:2px;height:100%;
+  background:linear-gradient(180deg,rgba(216,68,58,.5),transparent);
+  opacity:.5;transition:opacity .35s;
+}
+.lcard:hover{border-color:var(--line-2);transform:translateY(-2px);background:rgba(216,218,211,.05)}
+.lcard:hover::before{opacity:1}
+.lcard__top{display:flex;justify-content:space-between;align-items:center;gap:8px;
+  font-family:var(--mono);font-size:8px;letter-spacing:.2em;color:var(--ink-4)}
+.lcard__k{color:var(--red-2)}
+.lcard__t{font-size:14px;font-weight:600;letter-spacing:.04em;color:#e9e7e0;line-height:1.45}
+.lcard__n{
+  font-size:11.5px;line-height:1.75;color:var(--ink-3);
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+}
+.lcard__acts{display:flex;gap:12px;margin-top:2px;opacity:0;transition:opacity .3s}
+.lcard:hover .lcard__acts{opacity:1}
+.lcard__acts button{
+  font-family:var(--mono);font-size:8.5px;letter-spacing:.12em;color:var(--ink-3);
+}
+.lcard__acts button:hover{color:var(--ink)}
+.lcard__acts button.danger:hover{color:var(--red-2)}
+@media (max-width:720px){
+  .lcard__acts{opacity:1}
+}
+

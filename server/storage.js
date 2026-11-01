@@ -5,7 +5,7 @@ import { config } from './config.js';
 import { fail } from './util.js';
 
 const COLLECTIONS = [
-  'owner', 'sessions', 'categories', 'items', 'notes', 'settings',
+  'owner', 'sessions', 'categories', 'items', 'notes', 'settings', 'boards',
   'works', 'work_versions',
   'uv_day_claims', 'uv_month_claims', 'visitors',
   'stats_daily', 'stats_monthly', 'stats_total',

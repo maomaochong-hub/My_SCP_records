@@ -105,7 +105,13 @@ export function serializeCookie(name, value, opts = {}) {
 /* ---------------- 校验 ---------------- */
 export function str(value, { max = 500, min = 0, trim = true } = {}) {
   if (value == null) return '';
-  let s = String(value);
+  const t = typeof value;
+  // 只接受标量。对象/数组/函数一律视为未提供：
+  // 否则 `{"name": {}}` 会变成一串 "[object Object]" 落进库里。
+  if (t === 'object' || t === 'function' || t === 'symbol') return '';
+  let s;
+  // 畸形值（例如自定义 toJSON 抛错）不能让接口变成 500
+  try { s = String(value); } catch { return ''; }
   if (trim) s = s.trim();
   if (s.length > max) s = s.slice(0, max);
   if (s.length < min) return null;
@@ -113,9 +119,21 @@ export function str(value, { max = 500, min = 0, trim = true } = {}) {
 }
 
 export function num(value, { min = -1e9, max = 1e9, def = 0 } = {}) {
-  const n = Number(value);
+  let n;
+  try { n = Number(value); } catch { return def; }
   if (!Number.isFinite(n)) return def;
   return Math.min(max, Math.max(min, n));
+}
+
+/**
+ * 原样转字符串（不 trim、不给默认值），永不对畸形输入抛错。
+ * 用于请求体里取「任意类型都可能传进来」的字段。
+ */
+export function text(value, max = 0) {
+  if (value == null) return '';
+  let s;
+  try { s = String(value); } catch { return ''; }
+  return max > 0 && s.length > max ? s.slice(0, max) : s;
 }
 
 export function bool(value, def = false) {

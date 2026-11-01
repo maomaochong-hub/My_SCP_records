@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { fail, hashPassword, randomToken, sha256, verifyPassword } from './util.js';
+import { fail, hashPassword, randomToken, sha256, text, verifyPassword } from './util.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 export const SESSION_TTL = 7 * DAY;
@@ -70,8 +70,8 @@ export function purgeExpiredSessions(store) {
 export async function login(store, { email, password, ipHash, uaHash }) {
   const started = Date.now();
   const owner = getOwner(store);
-  const okEmail = !!owner && String(email || '').trim().toLowerCase() === owner.email;
-  const okPass = verifyPassword(String(password || ''), okEmail ? owner.passwordHash : getDummy());
+  const okEmail = !!owner && text(email).trim().toLowerCase() === owner.email;
+  const okPass = verifyPassword(text(password), okEmail ? owner.passwordHash : getDummy());
   const ok = okEmail && okPass;
 
   // 失败响应补足 250ms，避免用响应时间判断邮箱是否存在
@@ -88,14 +88,14 @@ export async function login(store, { email, password, ipHash, uaHash }) {
 export function changePassword(store, ownerId, current, next) {
   const owner = getOwner(store);
   if (!owner || owner._id !== ownerId) fail(401, 'E_AUTH_REQUIRED', '请先登录');
-  if (!verifyPassword(String(current || ''), owner.passwordHash)) {
+  if (!verifyPassword(text(current), owner.passwordHash)) {
     fail(400, 'E_VALIDATION', '当前密码不正确', { field: 'currentPassword' });
   }
-  if (String(next || '').length < 10) {
+  if (text(next).length < 10) {
     fail(400, 'E_VALIDATION', '新密码至少 10 位', { field: 'newPassword' });
   }
   store.update('owner', ownerId, {
-    passwordHash: hashPassword(String(next)),
+    passwordHash: hashPassword(text(next)),
     passwordChangedAt: Date.now(),
   });
   destroyAllSessions(store, ownerId);

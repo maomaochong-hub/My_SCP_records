@@ -298,9 +298,12 @@ export function createServer(store) {
           throw new AppError(401, 'E_AUTH_REQUIRED', '需要所有者登录');
         }
 
-        const body = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)
+        const parsed = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)
           ? await readBody(req, pathname === '/api/uploads' ? UPLOAD_BODY : MAX_BODY)
           : {};
+        // JSON 允许 null / 数字 / 数组 / 字符串字面量，但所有 handler 都按对象取字段：
+        // 在这里统一收口，避免 `body.xxx` 直接抛错变成 500。
+        const body = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
 
         let result;
         try {

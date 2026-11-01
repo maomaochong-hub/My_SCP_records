@@ -9,7 +9,7 @@
  * 数据整块存在 db.json 里，图片只存 /media/<name>，不进 JSON。
  */
 
-import { fail, num, str } from './util.js';
+import { fail, num, str, text } from './util.js';
 import { newId } from './util.js';
 
 const LIMIT = {
@@ -44,7 +44,8 @@ function coord(v, def) {
 
 function normNode(raw, i) {
   const n = raw && typeof raw === 'object' ? raw : {};
-  const type = NODE_TYPES.has(String(n.type)) ? String(n.type) : 'note';
+  const typeStr = text(n.type, 20);
+  const type = NODE_TYPES.has(typeStr) ? typeStr : 'note';
   const node = {
     id: str(n.id, { max: 36 }) || newId('nd'),
     type,
@@ -71,7 +72,8 @@ function normNode(raw, i) {
     node.image = normMedia(n.image);
     node.caption = str(n.caption, { max: LIMIT.label }) || '';
   } else if (type === 'shape') {
-    node.shape = SHAPES.has(String(n.shape)) ? String(n.shape) : 'rect';
+    const shapeStr = text(n.shape, 20);
+    node.shape = SHAPES.has(shapeStr) ? shapeStr : 'rect';
     node.rot = num(n.rot, { min: -360, max: 360, def: 0 });
     node.symbol = str(n.symbol, { max: 8 }) || '';
   } else if (type === 'stroke') {
@@ -119,8 +121,13 @@ function bump(store) {
 }
 
 function normGraph(raw) {
-  const nodes = (Array.isArray(raw.nodes) ? raw.nodes : []).slice(0, LIMIT.nodes).map(normNode);
-  const ids = new Set(nodes.map((n) => n.id));
+  const seen = new Set();
+  const nodes = (Array.isArray(raw.nodes) ? raw.nodes : [])
+    .slice(0, LIMIT.nodes)
+    .map(normNode)
+    // 重复 id 会让连线指到两个节点上，只保留第一个
+    .filter((n) => (seen.has(n.id) ? false : (seen.add(n.id), true)));
+  const ids = seen;
   const edges = (Array.isArray(raw.edges) ? raw.edges : [])
     .slice(0, LIMIT.edges)
     .map((e) => normEdge(e, ids))
@@ -156,7 +163,8 @@ export function getBoard(store, id) {
 }
 
 export function createBoard(store, body) {
-  const kind = KINDS.has(String(body.kind)) ? String(body.kind) : 'links';
+  const kindStr = text(body.kind, 20);
+  const kind = KINDS.has(kindStr) ? kindStr : 'links';
   const now = Date.now();
   const graph = normGraph(body);
   const doc = store.insert('boards', {
@@ -191,7 +199,8 @@ export function updateBoard(store, id, body) {
   }
   if (body.note != null) patch.note = str(body.note, { max: LIMIT.note }) || '';
   if (body.cats !== undefined) patch.cats = normCats(store, body.cats);
-  if (body.kind != null && KINDS.has(String(body.kind))) patch.kind = String(body.kind);
+  const kindPatch = text(body.kind, 20);
+  if (body.kind != null && KINDS.has(kindPatch)) patch.kind = kindPatch;
   if (body.x != null) patch.x = coord(body.x, doc.x);
   if (body.y != null) patch.y = coord(body.y, doc.y);
   if (body.w != null) patch.w = num(body.w, { min: 180, max: 900, def: doc.w });

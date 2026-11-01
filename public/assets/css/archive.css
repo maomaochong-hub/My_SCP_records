@@ -308,8 +308,13 @@ body:not(.is-owner) .dcard__acts{display:none!important}
 .dcard__caret{
   width:0;height:0;flex:0 0 auto;
   border-left:3px solid transparent;border-right:3px solid transparent;
-  border-bottom:3.5px solid currentColor;opacity:.5;
+  border-top:3.5px solid currentColor;opacity:.5;
+  transition:transform .22s var(--ease),opacity .22s var(--ease);
 }
+/* 收起时箭头朝下；展开后翻成朝上并提亮（对应「再点一下收回」） */
+.dcard__tax:hover .dcard__caret,
+.dcard__tax:focus-within .dcard__caret,
+.dcard__tax.is-open .dcard__caret{transform:rotate(180deg);opacity:.85}
 .dcard__tax:hover .dcard__tag,
 .dcard__tax:focus-within .dcard__tag,
 .dcard__tax.is-open .dcard__tag{

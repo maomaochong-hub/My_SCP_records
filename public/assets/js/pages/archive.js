@@ -262,9 +262,12 @@ const DOOM_AT = 420 * 1000;
 let redactTimer = null;
 let doomTimer = null;
 let lastActivity = 0;
+let purged = false;
 
 /* ---------------- 挂载 ---------------- */
 export async function mount({ isOwner }) {
+  purged = false;
+  lastActivity = 0;
   const app = $('#app');
   app.innerHTML = `
     <section class="page page--archive">
@@ -300,6 +303,7 @@ export async function mount({ isOwner }) {
   }
 
   function setPurged(on) {
+    purged = on;
     const el = archiveNameEl();
     if (!el) return;
     el.textContent = on ? '[已删除]' : ARCHIVE_NAME;
@@ -327,10 +331,11 @@ export async function mount({ isOwner }) {
   }
 
   function onActivity() {
-    const now = Date.now();
-    if (now - lastActivity < 800) return;
-    lastActivity = now;
+    // 任何动作都立刻把名字恢复回来；节流只作用于「重新计时」，不影响恢复
     setPurged(false);
+    const now = Date.now();
+    if (now - lastActivity < 300) return;
+    lastActivity = now;
     arm();
   }
 
@@ -382,6 +387,8 @@ export async function mount({ isOwner }) {
   function paintSide() {
     const side = $('.side', app);
     if (side) side.outerHTML = sideHTML(isOwner);
+    // 侧栏重绘会把名字换回原名，正在生效的「已删除」状态需要补回去
+    if (purged) setPurged(true);
     arm();
   }
 

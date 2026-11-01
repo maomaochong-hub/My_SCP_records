@@ -1,13 +1,14 @@
 import { config } from './config.js';
-import { fail, num, str } from './util.js';
+import { fail, num, str, text } from './util.js';
 import { newId } from './util.js';
 
 const LIMITS = { html: 200000, css: 100000, js: 100000, total: 256000 };
 
-function sizeOk(source) {
-  const html = String(source.html || '');
-  const css = String(source.css || '');
-  const js = String(source.js || '');
+function sizeOk(input) {
+  const source = input && typeof input === 'object' ? input : {};
+  const html = text(source.html);
+  const css = text(source.css);
+  const js = text(source.js);
   if (html.length + css.length + js.length > LIMITS.total) {
     fail(413, 'E_TOO_LARGE', '作品体积超过 256KB 上限');
   }
@@ -198,10 +199,11 @@ export function workSource(store, id, { draft = false } = {}) {
 }
 
 /** 独立沙箱文档：主站永不直接渲染用户 HTML */
-export function previewHtml(source) {
-  const css = String(source.css || '');
-  const js = String(source.js || '');
-  const html = String(source.html || '');
+export function previewHtml(input) {
+  const source = input && typeof input === 'object' ? input : {};
+  const css = text(source.css);
+  const js = text(source.js);
+  const html = text(source.html);
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>

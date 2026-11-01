@@ -156,13 +156,28 @@ class FileStore {
     if (this.timer.unref) this.timer.unref();
   }
 
-  async flush() {
-    if (!this.dirty) return;
-    this.dirty = false;
-    const tmp = `${this.file}.tmp`;
-    const payload = JSON.stringify(this.state);
-    this.writing = fsp.writeFile(tmp, payload).then(() => fsp.rename(tmp, this.file));
-    await this.writing;
+  flush() {
+    // 串行化：同一时刻只允许一次「写临时文件 + rename」。
+    // 大库落盘可能超过 80ms 合并窗口，并行写同一 tmp 路径会让 rename 撞车。
+    if (!this.writing) {
+      this.writing = this.writeNow()
+        .catch((e) => console.error('[store] flush failed', e))
+        .finally(() => {
+          this.writing = null;
+          if (this.dirty) this.touch();
+        });
+    }
+    return this.writing;
+  }
+
+  async writeNow() {
+    while (this.dirty) {
+      this.dirty = false;
+      const tmp = `${this.file}.tmp`;
+      const payload = JSON.stringify(this.state);
+      await fsp.writeFile(tmp, payload);
+      await fsp.rename(tmp, this.file);
+    }
   }
 
   async close() {

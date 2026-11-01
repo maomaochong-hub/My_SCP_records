@@ -1,4 +1,4 @@
-import { fail, httpUrl, num, str } from './util.js';
+import { fail, httpUrl, num, str, text } from './util.js';
 import { newId } from './util.js';
 import { removeImageIfUnused } from './uploads.js';
 import { normBoardOut } from './boards.js';
@@ -367,12 +367,12 @@ export function importAll(store, body) {
     const name = str(c.name, { max: MAX.catName, min: 1 });
     if (!name) continue;
     const existing = store.all('categories').find((x) => x.name === name);
-    if (existing) { catMap.set(String(c.id || c._id), existing._id); continue; }
+    if (existing) { catMap.set(text(c.id || c._id), existing._id); continue; }
     const id = newId('cat');
     store.insert('categories', {
       _id: id, name, sort: num(c.sort, { def: counts.categories }), createdAt: num(c.createdAt, { def: now }), updatedAt: now,
     });
-    catMap.set(String(c.id || c._id), id);
+    catMap.set(text(c.id || c._id), id);
     counts.categories++;
   }
 
@@ -382,7 +382,8 @@ export function importAll(store, body) {
     const rawIds = Array.isArray(it.catIds) ? it.catIds : it.catId ? [it.catId] : [];
     const ids = [];
     for (const raw of rawIds) {
-      const mapped = catMap.get(String(raw)) || (store.get('categories', String(raw)) ? String(raw) : null);
+      const rawKey = text(raw, 60);
+      const mapped = catMap.get(rawKey) || (store.get('categories', rawKey) ? rawKey : null);
       if (mapped && !ids.includes(mapped)) ids.push(mapped);
     }
     const display = str(it.displayCatId, { max: 40 });
@@ -428,7 +429,8 @@ export function importAll(store, body) {
   for (const b of Array.isArray(data.boards) ? data.boards : []) {
     const cats = [];
     for (const raw of Array.isArray(b.cats) ? b.cats : []) {
-      const mapped = catMap.get(String(raw)) || (store.get('categories', String(raw)) ? String(raw) : null);
+      const rawKey = text(raw, 60);
+      const mapped = catMap.get(rawKey) || (store.get('categories', rawKey) ? rawKey : null);
       if (mapped && !cats.includes(mapped)) cats.push(mapped);
     }
     store.insert('boards', {
@@ -441,7 +443,7 @@ export function importAll(store, body) {
       y: num(b.y, { def: 40 }),
       w: num(b.w, { min: 180, max: 900, def: 300 }),
       h: num(b.h, { min: 80, max: 900, def: 180 }),
-      color: /^#[0-9a-f]{3,8}$/i.test(String(b.color || '')) ? b.color : '#8d9188',
+      color: (() => { const c = text(b.color, 9); return /^#[0-9a-f]{3,8}$/i.test(c) ? c : '#8d9188'; })(),
       nodes: Array.isArray(b.nodes) ? b.nodes.slice(0, 400) : [],
       edges: Array.isArray(b.edges) ? b.edges.slice(0, 600) : [],
       createdAt: num(b.createdAt, { def: now }),

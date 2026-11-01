@@ -327,3 +327,57 @@ test('月度列表包含当月且标记进行中', async () => {
   assert.equal(months[0].current, true);
   assert.equal(months[0].archived, false);
 });
+
+/* ---------------- 畸形输入 ---------------- */
+test('畸形请求体一律 4xx，不会打成 5xx', async () => {
+  const cases = [
+    ['POST', '/api/items', 'null'],
+    ['POST', '/api/items', '[]'],
+    ['POST', '/api/items', '"str"'],
+    ['POST', '/api/items', '{"title":{"toString":1},"note":{"valueOf":1}}'],
+    ['POST', '/api/categories', '{"name":{}}'],
+    ['POST', '/api/boards', '{"kind":{"valueOf":1},"nodes":"x","edges":{}}'],
+    ['PATCH', '/api/settings', '{"other":{"remark":{"toString":1}}}'],
+  ];
+  for (const [method, pathname, raw] of cases) {
+    const res = await fetch(ORIGIN + pathname, {
+      method,
+      headers: { 'Content-Type': 'application/json', 'X-CSRF': '1', Cookie: cookie },
+      body: raw,
+    });
+    assert.ok(res.status < 500, `${method} ${pathname} ${raw} → ${res.status}`);
+  }
+});
+
+test('对象/数组不会被塞进文本字段', async () => {
+  const res = await fetch(`${ORIGIN}/api/categories`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF': '1', Cookie: cookie },
+    body: JSON.stringify({ name: { valueOf: 1 } }),
+  });
+  assert.equal(res.status, 400, '对象形式的分类名应被拒绝');
+
+  const items = await (await api('/api/items')).json();
+  assert.ok(!items.data.some((it) => /\[object Object\]/.test(it.title + it.code + it.note)), '库里不应出现 [object Object]');
+});
+
+test('画板重复节点 id 只保留第一个', async () => {
+  const res = await api('/api/boards', {
+    method: 'POST',
+    auth: true,
+    body: {
+      kind: 'board',
+      title: '重复 id',
+      nodes: [
+        { id: 'dup', type: 'text', text: '第一个', x: 0, y: 0 },
+        { id: 'dup', type: 'text', text: '第二个', x: 100, y: 0 },
+        { id: 'b', type: 'text', text: '第三个', x: 200, y: 0 },
+      ],
+      edges: [{ from: 'dup', to: 'b' }],
+    },
+  });
+  const d = (await res.json()).data;
+  assert.equal(d.nodes.length, 2);
+  assert.equal(d.nodes[0].text, '第一个');
+  assert.equal(d.edges.length, 1);
+});

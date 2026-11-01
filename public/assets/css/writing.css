@@ -141,12 +141,17 @@ body:not(.is-owner) .note__title,body:not(.is-owner) .note__body{cursor:default}
   position:relative;height:clamp(440px,58vh,700px);
   border:1px solid var(--line);background-color:#090b0e;
   box-shadow:inset 0 0 90px 10px rgba(0,0,0,.5);
-  overflow:hidden;
+  /* 不能 hidden：节点按坐标摆放，超出容器的部分必须能滚过去，否则窄屏上永远够不到 */
+  overflow:auto;
 }
 .wsurface__box .empty{border:0;height:100%;justify-content:center}
 
 @media (max-width:980px){
   .wgrid{grid-template-columns:1fr}
   .wside{position:static}
+  /* 分类多起来（20+）时把画布挤出首屏，窄屏改成固定高度的可滚动列表 */
+  .wside .cats{max-height:196px;overflow-y:auto;overscroll-behavior:contain;padding-right:2px}
+  .wside .cats::-webkit-scrollbar{width:3px}
+  .wside .cats::-webkit-scrollbar-thumb{background:var(--line-2)}
 }
 
